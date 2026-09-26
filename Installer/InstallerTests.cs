@@ -15,14 +15,12 @@ class InstallerTests
         Reject(()=>InstallCore.ValidateGame(root,false),"reject non-game directory");
         string src=Path.Combine(root,"src"),dest=Path.Combine(root,"game"); Directory.CreateDirectory(src); Directory.CreateDirectory(dest);
         File.WriteAllText(Path.Combine(src,"mod.dll"),"new"); File.WriteAllText(Path.Combine(dest,"mod.dll"),"old"); File.WriteAllText(Path.Combine(dest,"config.txt"),"keep");
-        string backup=InstallCore.Apply(src,dest,null);
-        Check(File.ReadAllText(Path.Combine(dest,"mod.dll"))=="new" && File.ReadAllText(Path.Combine(backup,"original/mod.dll"))=="old","update backs up original");
+        InstallCore.Apply(src,dest);
+        Check(File.ReadAllText(Path.Combine(dest,"mod.dll"))=="new","directly replace old mod");
+        Check(!Directory.Exists(Path.Combine(dest,"ModBackups")),"no backup directory created");
         Check(File.ReadAllText(Path.Combine(dest,"config.txt"))=="keep","preserve unrelated configuration");
-        File.WriteAllText(Path.Combine(src,"extra.dll"),"added"); File.WriteAllText(Path.Combine(dest,"mod.dll"),"before");
-        Reject(()=>InstallCore.Apply(src,dest,n=>{if(n==2)throw new IOException("simulated failure");}),"injected write failure reported");
-        Check(File.ReadAllText(Path.Combine(dest,"mod.dll"))=="before" && !File.Exists(Path.Combine(dest,"extra.dll")),"rollback restores originals and removes new files");
-        string fresh=Path.Combine(root,"fresh"); Directory.CreateDirectory(fresh); InstallCore.Apply(src,fresh,null);
-        Check(File.Exists(Path.Combine(fresh,"extra.dll")),"fresh install");
+        string fresh=Path.Combine(root,"fresh"); Directory.CreateDirectory(fresh); InstallCore.Apply(src,fresh);
+        Check(File.Exists(Path.Combine(fresh,"mod.dll")),"fresh install");
         string zip=Path.Combine(root,"bad.zip"); using(var a=ZipFile.Open(zip,ZipArchiveMode.Create)) {using(var w=new StreamWriter(a.CreateEntry("../escape.txt").Open()))w.Write("bad");}
         Reject(()=>InstallCore.Extract(zip,Path.Combine(root,"extract")),"reject malicious archive entry");
         Check(InstallCore.Hash(args[0])==InstallCore.LoaderHash,"official loader hash matches pinned version");
@@ -30,7 +28,15 @@ class InstallerTests
         Check(InstallCore.HasCompatibleLoader(loader),"official loader recognized as compatible");
         Check(!InstallCore.HasCompatibleLoader(fresh),"fresh game needs loader");
         string broken=Path.Combine(root,"broken"); Directory.CreateDirectory(broken); File.WriteAllText(Path.Combine(broken,"winhttp.dll"),"other");
-        Reject(()=>InstallCore.HasCompatibleLoader(broken),"refuse incomplete or conflicting loader");
+        Check(!InstallCore.HasCompatibleLoader(broken),"incomplete loader requests repair instead of refusal");
+        InstallCore.Apply(loader,broken);
+        Check(InstallCore.HasCompatibleLoader(broken),"repair leftover winhttp with full loader");
+        Check(!Directory.Exists(Path.Combine(broken,"ModBackups")),"loader repair creates no backups");
+        File.Delete(Path.Combine(broken,"BepInEx/core/BepInEx.Core.dll"));
+        Check(!InstallCore.HasCompatibleLoader(broken),"missing core requests repair");
+        InstallCore.Apply(loader,broken);
+        Check(InstallCore.HasCompatibleLoader(broken),"missing core repaired successfully");
         Console.WriteLine(count+" tests passed. Fixtures: "+root);
     }
 }
+

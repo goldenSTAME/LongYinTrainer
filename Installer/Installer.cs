@@ -62,56 +62,25 @@ internal static class InstallCore
     {
         string core = SafePath(root, "BepInEx/core/BepInEx.Core.dll");
         string doorstop = SafePath(root, "doorstop_config.ini");
-        bool present = Directory.Exists(Path.Combine(root, "BepInEx/core")) || File.Exists(Path.Combine(root,"winhttp.dll")) || File.Exists(doorstop);
-        if (!present) return false;
-        if (!File.Exists(core) || !File.Exists(SafePath(root,"BepInEx/core/BepInEx.Unity.IL2CPP.dll")) || !File.Exists(SafePath(root,"winhttp.dll")) || !File.Exists(SafePath(root,"dotnet/coreclr.dll")) || !File.Exists(doorstop))
-            throw new IOException("发现其他加载器或不完整的 BepInEx，已停止以保留原文件。请按安装教程检查现有加载器。");
-        if (AssemblyName.GetAssemblyName(core).Version.Major != 6) throw new IOException("现有 BepInEx 不是版本 6，请先检查加载器版本。");
+        if (!File.Exists(core) || !File.Exists(SafePath(root,"BepInEx/core/BepInEx.Unity.IL2CPP.dll")) || !File.Exists(SafePath(root,"winhttp.dll")) || !File.Exists(SafePath(root,"dotnet/coreclr.dll")) || !File.Exists(doorstop)) return false;
+        try { if (AssemblyName.GetAssemblyName(core).Version.Major != 6) return false; }
+        catch (BadImageFormatException) { return false; }
         string ini = File.ReadAllText(doorstop).Replace("/", "\\");
         if (!System.Text.RegularExpressions.Regex.IsMatch(ini, @"(?im)^\s*enabled\s*=\s*true\s*$") ||
-            !System.Text.RegularExpressions.Regex.IsMatch(ini, @"(?im)^\s*target_assembly\s*=\s*BepInEx\\core\\BepInEx.Unity.IL2CPP.dll\s*$"))
-            throw new IOException("现有 Doorstop 配置未启用 BepInEx IL2CPP，请先检查配置；安装器不会覆盖其他加载器配置。");
+            !System.Text.RegularExpressions.Regex.IsMatch(ini, @"(?im)^\s*target_assembly\s*=\s*BepInEx\\core\\BepInEx.Unity.IL2CPP.dll\s*$")) return false;
         return true;
     }
-    // Keep overwritten originals outside plugins. Each write is journaled before mutation.
-    internal static string Apply(string source, string target, Action<int> afterWrite)
+    internal static void Apply(string source, string target)
     {
         var files = Directory.GetFiles(source, "*", SearchOption.AllDirectories);
         foreach (var file in files) SafePath(target, file.Substring(source.TrimEnd('\\').Length + 1));
-        string backup = SafePath(target, "ModBackups/Installer-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(backup);
-        var touched = new List<string>(); var originals = new Dictionary<string,string>();
-        try
+        foreach (var file in files)
         {
-            foreach (var file in files)
-            {
-                string relative = file.Substring(source.TrimEnd('\\').Length + 1);
-                string dest = SafePath(target, relative);
-                if (File.Exists(dest))
-                {
-                    string copy = SafePath(backup, "original/" + relative);
-                    Directory.CreateDirectory(Path.GetDirectoryName(copy)); File.Copy(dest, copy, false); originals.Add(dest, copy);
-                }
-                File.AppendAllText(Path.Combine(backup,"manifest.txt"), (originals.ContainsKey(dest) ? "REPLACE " : "NEW ") + relative + Environment.NewLine);
-                Directory.CreateDirectory(Path.GetDirectoryName(dest)); touched.Add(dest);
-                File.Copy(file, dest, true);
-                if (Hash(file) != Hash(dest)) throw new IOException("写入校验失败：" + relative);
-                if (afterWrite != null) afterWrite(touched.Count);
-            }
-            File.WriteAllText(Path.Combine(backup,"SUCCESS.txt"), "安装成功。original 保存被覆盖文件；manifest 记录新增和覆盖路径。卸载不撤销存档修改。");
-            return backup;
-        }
-        catch (Exception error)
-        {
-            var failures = new List<string>();
-            for (int i=touched.Count-1;i>=0;i--)
-            {
-                string path = touched[i];
-                try { if (originals.ContainsKey(path)) File.Copy(originals[path],path,true); else if (File.Exists(path)) File.Delete(path); }
-                catch (Exception rollback) { failures.Add(path + ": " + rollback.Message); }
-            }
-            string details = failures.Count == 0 ? "已回滚本次文件修改。" : "部分文件未能回滚：\r\n" + String.Join("\r\n", failures);
-            throw new IOException(error.Message + "\r\n" + details + "\r\n备份：" + backup, error);
+            string relative = file.Substring(source.TrimEnd('\\').Length + 1);
+            string dest = SafePath(target, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(dest));
+            File.Copy(file, dest, true);
+            if (Hash(file) != Hash(dest)) throw new IOException("写入校验失败，请重新安装：" + relative);
         }
     }
 }
@@ -131,7 +100,7 @@ internal sealed class InstallerWindow : Form
     string root = AppDomain.CurrentDomain.BaseDirectory; bool busy;
     public InstallerWindow()
     {
-        Text = "龙胤立志传 修改器 · 一键安装"; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
+        Text = "龙胤立志传 修改器 · 一键安装 0.4.26.1"; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
         Font = new System.Drawing.Font("Microsoft YaHei UI",10); FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false;
         info.SetBounds(22,20,570,175); info.Text="准备安装 BepInEx + 修改器 0.4.26…";
         progress.SetBounds(22,205,570,22); progress.Style=ProgressBarStyle.Marquee;
@@ -148,15 +117,15 @@ internal sealed class InstallerWindow : Form
         try
         {
             string target=root;
-            string backup=await Task.Run(() => Install(target));
-            info.Text="安装完成！\r\n启动游戏并读取存档，按 H 打开 / 收起修改器。\r\n首次启动 BepInEx 需要生成接口，可能还需联网，请耐心等待。\r\n\r\n这是较为暴力的修改，会影响游戏平衡与体验；修改前备份存档。\r\n备份位置："+backup;
+            await Task.Run(() => Install(target));
+            info.Text="安装完成！\r\n启动游戏并读取存档，按 H 打开 / 收起修改器。\r\n首次启动 BepInEx 需要生成接口，可能还需联网，请耐心等待。\r\n\r\n这是较为暴力的修改，会影响游戏平衡与体验；修改前备份存档。";
             progress.Style=ProgressBarStyle.Blocks; progress.Value=100;
         }
         catch (UnauthorizedAccessException ex) { info.Text="权限不足，安装已停止。请检查目录写入权限。\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
         catch (Exception ex) { info.Text="安装未完成：\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
         finally { busy=false; retry.Enabled=true; }
     }
-    string Install(string target)
+    void Install(string target)
     {
         InstallCore.ValidateGame(target,true);
         bool existing=InstallCore.HasCompatibleLoader(target);
@@ -188,7 +157,7 @@ internal sealed class InstallerWindow : Form
         string docs=Path.Combine(stage,"LongYinTrainer-说明"); Directory.CreateDirectory(docs);
         foreach(var name in new[]{"INSTALL.md","USAGE.md"}) File.Copy(Path.Combine(modStage,name),Path.Combine(docs,name));
         InstallCore.ValidateGame(target,true);
-        return InstallCore.Apply(stage,target,null);
+        InstallCore.Apply(stage,target);
     }
     [STAThread] static void Main()
     {
@@ -199,3 +168,4 @@ internal sealed class InstallerWindow : Form
         }
     }
 }
+
