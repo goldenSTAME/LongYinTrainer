@@ -19,3 +19,6 @@
 **/obj/
 *.before-*
 dist/
+
+!Installer/
+!Installer/*.cs

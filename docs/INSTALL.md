@@ -1,5 +1,9 @@
 # 龙胤立志传 修改器安装教程（BepInEx）
 
+## 推荐：一键安装 EXE
+
+下载 `LongYinTrainer-Setup-0.4.26.exe`，退出游戏，将它放到 `LongYinLiZhiZhuan.exe` 同级后双击。安装器内置 Mod，首次安装自动联网下载并校验官方 BepInEx；已有兼容 BepInEx 时保留加载器、配置和其他插件，只更新 Mod。完成后启动游戏，进入存档按 H。详细说明见仓库 `docs/ONE-CLICK.md`。以下手动安装步骤适用于 ZIP 包。
+
 安装后进入存档，按 **H** 打开 / 收起“江湖札记”。H 只控制面板显示，各项功能需单独开启，详见 [使用说明](USAGE.md)。发布包同时附带本安装教程和 USAGE.md。
 
 ## 发布包是否完整？
