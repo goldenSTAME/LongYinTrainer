@@ -127,9 +127,9 @@ internal sealed class InstallerWindow : Form
     string root = AppDomain.CurrentDomain.BaseDirectory; bool busy;
     public InstallerWindow()
     {
-        Text = "龙胤立志传 修改器 · 一键安装 0.4.26.2"; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
+        Text = "龙胤立志传 修改器 · 一键安装 0.4.27"; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
         Font = new System.Drawing.Font("Microsoft YaHei UI",10); FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false;
-        info.SetBounds(22,20,570,175); info.Text="准备安装 BepInEx + 修改器 0.4.26…";
+        info.SetBounds(22,20,570,175); info.Text="准备安装 BepInEx + 修改器 0.4.27…";
         progress.SetBounds(22,205,570,22); progress.Style=ProgressBarStyle.Marquee;
         closeButton.SetBounds(22,246,190,36); closeButton.Text="关闭"; closeButton.Enabled=false;
         closeButton.Click += delegate { Close(); };
@@ -199,6 +199,7 @@ internal sealed class InstallerWindow : Form
         }
     }
 }
+
 
 
 

@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.26")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.27")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -1149,6 +1149,7 @@ public static partial class TrainerBehaviour
     private static string _affixType = "maxHp";
     private static string _affixValue = "100";
     private static int _affixPresetGroup;
+    private static bool _showItemAffixes;
     private static int _baseAffixPage;
     private static int _extraAffixPage;
     private static string _allAttr = "200";
@@ -2634,13 +2635,15 @@ public static partial class TrainerBehaviour
         {
             _baseAffixPage = 0;
             _extraAffixPage = 0;
+            _showItemAffixes = false;
             _itemName = item.name ?? "";
             _itemValue = item.value.ToString(CultureInfo.InvariantCulture);
             _itemLevel = item.itemLv.ToString(CultureInfo.InvariantCulture);
             _itemRare = item.rareLv.ToString(CultureInfo.InvariantCulture);
             _itemWeight = item.weight.ToString(CultureInfo.InvariantCulture);
             _itemPoison = item.poisonNum.ToString(CultureInfo.InvariantCulture);
-            _status = $"已选择物品：{item.Name(false)}（ID {item.itemID}）。点击上方“装备词条”页签载入。";
+            InvalidatePages(2, 3);
+            _status = $"已选择物品：{item.Name(false)}（ID {item.itemID}）。点击上方“物品修改”页签载入。";
             LongYinTrainerPlugin.Logger.LogInfo($"Inventory selection committed safely: owner={_selectedItemOwnerId}, index={_selectedItemIndex}, itemID={_selectedItemId}, type={_selectedItemType}, subType={_selectedItemSubType}.");
         }
         catch
@@ -5060,7 +5063,7 @@ public static partial class TrainerBehaviour
             var closeText = AddText(titleBar.transform, "H  收起", new Vector2(910, 0), new Vector2(140, 36), 16, TextAnchor.MiddleRight);
             closeText.color = new Color(0.88f, 0.82f, 0.68f, 1f);
 
-            var tabNames = new[] { "战斗辅助", "角色数值", "背包物品", "装备词条", "打造／炼丹", "势力／开局", "更多功能", "突破自选" };
+            var tabNames = new[] { "战斗辅助", "角色数值", "背包物品", "物品修改", "打造／炼丹", "势力／开局", "更多功能", "突破自选" };
             var tabGap = 3f;
             var tabWidth = (1080f - tabGap * (tabNames.Length - 1)) / tabNames.Length;
             for (var i = 0; i < tabNames.Length; i++)
@@ -5485,7 +5488,7 @@ public static partial class TrainerBehaviour
                 case 0: BuildNativeBattle(); break;
                 case 1: BuildNativeHero(); break;
                 case 2: BuildNativeItemCatalog(); break;
-                case 3: BuildNativeAffix(); break;
+                case 3: BuildNativeItemModification(); break;
                 case 4: BuildNativeCraft(); break;
                 case 5: BuildNativeFaction(); break;
                 case 6: BuildNativeExtras(); break;
@@ -5742,11 +5745,12 @@ public static partial class TrainerBehaviour
         });
         AddText(p, "稀有度说明\n" + BuildRarityGuide(), new Vector2(730, 438), new Vector2(330, 160), 15);
 
-        AddText(p, "提示：这里展示的是生成图鉴，不会当作背包现有物品。编辑已有装备时，请在游戏背包中点击该装备，再进入“装备词条”。", new Vector2(0, 520), new Vector2(690, 56), 15);
+        AddText(p, "提示：这里展示的是生成图鉴，不会当作背包现有物品。编辑已有物品时，请在游戏背包中点击该物品，再进入“物品修改”。", new Vector2(0, 520), new Vector2(690, 56), 15);
     }
 
     private static void BuildSelectedItemEditor(Transform parent, ItemData item)
     {
+        var editedPointer = item.Pointer;
         AddText(parent, "编辑背包物品", new Vector2(730, 48), new Vector2(330, 34), 21, TextAnchor.MiddleCenter);
         AddText(parent, item.Name(false), new Vector2(730, 78), new Vector2(330, 32), 16, TextAnchor.MiddleCenter);
 
@@ -5767,7 +5771,7 @@ public static partial class TrainerBehaviour
         AddButton(parent, "应用现有物品数值", new Vector2(730, 360), new Vector2(330, 42), () =>
         {
             var current = ResolveSelectedItem();
-            if (current == null) { _status = "背包已经刷新，请重新点击要编辑的物品。"; return; }
+            if (current == null || current.Pointer != editedPointer) { _status = "所选物品已经变化，请重新打开物品修改页。"; return; }
             _itemName = name.text;
             _itemValue = itemValue.text;
             _itemLevel = level.text;
@@ -5780,6 +5784,7 @@ public static partial class TrainerBehaviour
         {
             ClearSelectedItem();
             _status = "已返回物品图鉴生成。";
+            _tab = 2;
             RequestPageRebuild();
         });
         AddText(parent, "稀有度：0 普通（灰）　1 优良（绿）\n2 稀有（蓝）　3 精良（紫）\n4 完美（橙）　5 绝世（红）\n等级只修改现有字段，不会重新抽取装备词条。", new Vector2(730, 456), new Vector2(330, 130), 14);
@@ -6168,6 +6173,29 @@ public static partial class TrainerBehaviour
         // Never overwrite level/rarity after native generation.  Those fields
         // must stay consistent with the generated affixes, frame and value.
         return best;
+    }
+
+    private static void BuildNativeItemModification()
+    {
+        var p = NativePageParent;
+        var item = ResolveSelectedItem();
+        if (item == null)
+        {
+            AddText(p, "请先在游戏背包中点击要修改的物品，再打开此页。", Vector2.zero, new Vector2(1040, 42), 21);
+            AddText(p, "药品、食物、材料、秘籍等可修改名称、价值、等级、稀有度、重量和毒量。装备与坐骑还有独立的词条和属性编辑。", new Vector2(0, 55), new Vector2(1000, 80), 17);
+            return;
+        }
+        bool supportsAffixes = item.equipmentData != null || item.horseData != null;
+        if (_showItemAffixes && supportsAffixes) BuildNativeAffix();
+        else
+        {
+            var editor = UiObject("ExistingItemFields", p, new Vector2(1080, 600), new Vector2(-700, 0));
+            BuildSelectedItemEditor(editor.transform, item);
+            AddText(p, "修改的是背包中已选中的这一件物品。\n\n价值、等级和稀有度分别保存；更改等级或稀有度不会重新生成装备词条。\n\n修改后重新查看物品详情。", new Vector2(430, 110), new Vector2(610, 180), 18);
+        }
+        AddButton(p, _showItemAffixes ? "物品数值" : "物品数值（当前）", new Vector2(0, 620), new Vector2(240, 32), () => { _showItemAffixes = false; RequestPageRebuild(); });
+        if (supportsAffixes)
+            AddButton(p, _showItemAffixes ? "装备／坐骑（当前）" : "装备／坐骑", new Vector2(260, 620), new Vector2(240, 32), () => { _showItemAffixes = true; RequestPageRebuild(); });
     }
 
     private static void BuildNativeAffix()
@@ -7322,12 +7350,17 @@ public static partial class TrainerBehaviour
             if (rarity < 0 || rarity > 5) throw new InvalidOperationException("稀有度只能填写 0–5");
             var level = ParseInt(_itemLevel);
             if (level < 0 || level > 999) throw new InvalidOperationException("等级只能填写 0–999");
+            // Validate every input before changing the native item.
+            var value = Math.Max(0, ParseInt(_itemValue));
+            var weight = ParseFloat(_itemWeight);
+            var poison = ParseFloat(_itemPoison);
+            if (!float.IsFinite(weight) || !float.IsFinite(poison)) throw new InvalidOperationException("重量和毒量必须是有限数字");
             item.name = _itemName;
-            item.value = Math.Max(0, ParseInt(_itemValue));
+            item.value = value;
             item.itemLv = level;
             item.rareLv = rarity;
-            item.weight = Math.Max(0f, ParseFloat(_itemWeight));
-            item.poisonNum = Math.Max(0f, ParseFloat(_itemPoison));
+            item.weight = Math.Max(0f, weight);
+            item.poisonNum = Math.Max(0f, poison);
             _itemValue = item.value.ToString(CultureInfo.InvariantCulture);
             _itemLevel = item.itemLv.ToString(CultureInfo.InvariantCulture);
             _itemRare = item.rareLv.ToString(CultureInfo.InvariantCulture);
@@ -7613,3 +7646,4 @@ public static partial class TrainerBehaviour
     }
     private static int ParseInt(string value) => int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
 }
+
