@@ -1,6 +1,6 @@
 # 龙胤立志传 修改器
 
-**新手推荐：[一键安装 EXE（修正版 0.4.26.1）](https://github.com/goldenSTAME/LongYinTrainer/raw/refs/heads/main/downloads/LongYinTrainer-Setup-0.4.26.1.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
+**新手推荐：[一键安装 EXE（修正版 0.4.26.2）](https://github.com/goldenSTAME/LongYinTrainer/raw/refs/heads/main/downloads/LongYinTrainer-Setup-0.4.26.2.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
 
 **下载：[0.4.26 安装包](https://github.com/goldenSTAME/LongYinTrainer/raw/refs/heads/main/downloads/LongYinTrainer-0.4.26.zip) · [SHA256 校验](downloads/LongYinTrainer-0.4.26.zip.sha256)**
 
@@ -67,4 +67,5 @@
 资源锁定有 7 项模拟检查，图标索引有 12 项模拟检查，不能代替真实游戏测试，不保证未来游戏版本始终兼容。
 
 本仓库尚未选择开源许可证；公开源码不代表已经授予修改、再分发许可。
+
 

@@ -46,7 +46,7 @@ internal static class InstallCore
     {
         string exe = SafePath(root, "LongYinLiZhiZhuan.exe");
         if (!File.Exists(exe) || !File.Exists(SafePath(root, "GameAssembly.dll")) || !Directory.Exists(SafePath(root, "LongYinLiZhiZhuan_Data")))
-            throw new IOException("请把安装器放到游戏根目录，与 LongYinLiZhiZhuan.exe 放在一起，再双击。也可在安装窗口选择游戏目录。");
+            throw new IOException("请把安装器放到游戏根目录，与 LongYinLiZhiZhuan.exe 放在一起，再双击。");
         using (var reader = new BinaryReader(File.OpenRead(exe)))
         {
             if (reader.ReadUInt16() != 0x5a4d) throw new IOException("游戏 EXE 格式无效。");
@@ -83,6 +83,33 @@ internal static class InstallCore
             if (Hash(file) != Hash(dest)) throw new IOException("写入校验失败，请重新安装：" + relative);
         }
     }
+    internal static void ConfigureGameLoader(string target)
+    {
+        string path=SafePath(target,"BepInEx/config/BepInEx.cfg");
+        var lines=new List<string>(File.Exists(path) ? File.ReadAllLines(path) : new string[0]);
+        SetConfig(lines,"Logging","UnityLogListening","false");
+        SetConfig(lines,"Logging.Console","Enabled","false");
+        Directory.CreateDirectory(Path.GetDirectoryName(path));
+        File.WriteAllLines(path,lines);
+    }
+    static void SetConfig(List<string> lines,string section,string key,string value)
+    {
+        int start=-1,end=lines.Count;
+        for(int i=0;i<lines.Count;i++)
+        {
+            string line=lines[i].Trim();
+            if(line=="["+section+"]") { start=i; continue; }
+            if(start>=0 && line.StartsWith("[")) { end=i; break; }
+        }
+        if(start<0) { lines.Add(""); lines.Add("["+section+"]"); lines.Add(key+" = "+value); return; }
+        bool found=false;
+        for(int i=start+1;i<end;i++)
+        {
+            string line=lines[i].Trim(); int eq=line.IndexOf('=');
+            if(eq>0 && line.Substring(0,eq).Trim()==key) { lines[i]=key+" = "+value; found=true; }
+        }
+        if(!found) lines.Insert(end,key+" = "+value);
+    }
 }
 
 internal sealed class InstallerWindow : Form
@@ -96,34 +123,35 @@ internal sealed class InstallerWindow : Form
             return request;
         }
     }
-    readonly Label info = new Label(); readonly ProgressBar progress = new ProgressBar(); readonly Button retry = new Button();
+    readonly Label info = new Label(); readonly ProgressBar progress = new ProgressBar(); readonly Button closeButton = new Button();
     string root = AppDomain.CurrentDomain.BaseDirectory; bool busy;
     public InstallerWindow()
     {
-        Text = "龙胤立志传 修改器 · 一键安装 0.4.26.1"; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
+        Text = "龙胤立志传 修改器 · 一键安装 0.4.26.2"; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
         Font = new System.Drawing.Font("Microsoft YaHei UI",10); FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false;
         info.SetBounds(22,20,570,175); info.Text="准备安装 BepInEx + 修改器 0.4.26…";
         progress.SetBounds(22,205,570,22); progress.Style=ProgressBarStyle.Marquee;
-        retry.SetBounds(22,246,190,36); retry.Text="选择游戏目录并安装"; retry.Enabled=false;
-        retry.Click += async delegate { using(var picker=new FolderBrowserDialog()) { picker.Description="选择包含 LongYinLiZhiZhuan.exe 的游戏目录"; if(picker.ShowDialog()==DialogResult.OK) { root=picker.SelectedPath; await RunInstall(); } } };
-        Controls.Add(info); Controls.Add(progress); Controls.Add(retry);
+        closeButton.SetBounds(22,246,190,36); closeButton.Text="关闭"; closeButton.Enabled=false;
+        closeButton.Click += delegate { Close(); };
+        Controls.Add(info); Controls.Add(progress); Controls.Add(closeButton);
         Shown += async delegate { await RunInstall(); };
         FormClosing += delegate(object sender, FormClosingEventArgs e) { if(busy) e.Cancel=true; };
     }
     void Report(string value) { BeginInvoke((Action)(() => info.Text=value)); }
     async Task RunInstall()
     {
-        busy=true; retry.Enabled=false; progress.Style=ProgressBarStyle.Marquee;
+        busy=true; closeButton.Enabled=false; progress.Style=ProgressBarStyle.Marquee;
         try
         {
             string target=root;
             await Task.Run(() => Install(target));
             info.Text="安装完成！\r\n启动游戏并读取存档，按 H 打开 / 收起修改器。\r\n首次启动 BepInEx 需要生成接口，可能还需联网，请耐心等待。\r\n\r\n这是较为暴力的修改，会影响游戏平衡与体验；修改前备份存档。";
             progress.Style=ProgressBarStyle.Blocks; progress.Value=100;
+            closeButton.Text="完成并关闭";
         }
         catch (UnauthorizedAccessException ex) { info.Text="权限不足，安装已停止。请检查目录写入权限。\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
         catch (Exception ex) { info.Text="安装未完成：\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
-        finally { busy=false; retry.Enabled=true; }
+        finally { busy=false; closeButton.Enabled=true; }
     }
     void Install(string target)
     {
@@ -158,6 +186,9 @@ internal sealed class InstallerWindow : Form
         foreach(var name in new[]{"INSTALL.md","USAGE.md"}) File.Copy(Path.Combine(modStage,name),Path.Combine(docs,name));
         InstallCore.ValidateGame(target,true);
         InstallCore.Apply(stage,target);
+        // This game's Unity build crashes in IL2CPPUnityLogSource before plugins load.
+        // Keep disk logging; disable only Unity log interception and the extra console.
+        InstallCore.ConfigureGameLoader(target);
     }
     [STAThread] static void Main()
     {
@@ -168,4 +199,6 @@ internal sealed class InstallerWindow : Form
         }
     }
 }
+
+
 

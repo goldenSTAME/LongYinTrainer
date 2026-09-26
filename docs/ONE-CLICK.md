@@ -1,8 +1,8 @@
 # 一键安装：BepInEx + 龙胤立志传 修改器
 
-安装器修正版 **0.4.26.1**，内置 Mod 仍为 0.4.26。
+安装器修正版 **0.4.26.2**，内置 Mod 仍为 0.4.26。
 
-1. 下载 Release 中的 `LongYinTrainer-Setup-0.4.26.1.exe`。
+1. 下载 Release 中的 `LongYinTrainer-Setup-0.4.26.2.exe`。
 2. 退出游戏，把 EXE 放到 `LongYinLiZhiZhuan.exe` 同级，双击。
 3. 等待安装完成，启动游戏、读取存档，按 **H**。
 
@@ -19,3 +19,8 @@ BepInEx 不存在或缺文件时，安装器自动下载官方 #785 IL2CPP x64 �
 先运行 `scripts/Package.ps1 -GamePath '游戏目录'`，再运行 `scripts/Build-Installer.ps1`。安装器源代码在 Installer 目录。
 
 回归检查涵盖完整安装、残留 winhttp.dll 的补装、缺少 core 的补装、直接覆盖 Mod、不生成备份目录、目录越界拒绝及官方包 SHA256 校验。
+
+
+安装器 0.4.26.2 修复：自动关闭会导致本游戏启动崩溃的 Unity 日志监听，保留磁盘日志；关闭额外控制台。安装成功后点击‘完成并关闭’。无自动备份。已验证游戏启动日志和 H 面板创建；未宣称所有游戏功能无警告。
+
+安装器必须与 LongYinLiZhiZhuan.exe 放在一起；放错目录会提示移动后重开，不提供目录选择。

@@ -2,7 +2,7 @@
 
 ## 推荐：一键安装 EXE
 
-下载 `LongYinTrainer-Setup-0.4.26.1.exe`，退出游戏，将它放到 `LongYinLiZhiZhuan.exe` 同级后双击。安装器内置 Mod，首次安装自动联网下载并校验官方 BepInEx；已有完整 BepInEx 时只更新 Mod，缺文件时自动补装加载器。不创建备份目录，按需直接覆盖安装。完成后启动游戏，进入存档按 H。详细说明见仓库 `docs/ONE-CLICK.md`。以下手动安装步骤适用于 ZIP 包。
+下载 `LongYinTrainer-Setup-0.4.26.2.exe`，退出游戏，将它放到 `LongYinLiZhiZhuan.exe` 同级后双击。安装器内置 Mod，首次安装自动联网下载并校验官方 BepInEx；已有完整 BepInEx 时只更新 Mod，缺文件时自动补装加载器。不创建备份目录，按需直接覆盖安装。完成后启动游戏，进入存档按 H。详细说明见仓库 `docs/ONE-CLICK.md`。以下手动安装步骤适用于 ZIP 包。
 
 安装后进入存档，按 **H** 打开 / 收起“江湖札记”。H 只控制面板显示，各项功能需单独开启，详见 [使用说明](USAGE.md)。发布包同时附带本安装教程和 USAGE.md。
 
@@ -60,3 +60,8 @@
 
 卸载或回退：退出游戏后移走 Mod DLL，或恢复备份 DLL。Mod 已经写入存档的数值不会自动恢复，需要原存档备份。
 
+
+
+## 手动安装的启动兼容设置
+在 BepInEx/config/BepInEx.cfg 的 [Logging] 节设置 UnityLogListening = false，否则本游戏可能在加载器初始化时崩溃。[Logging.Console] 节可设置 Enabled = false 关闭控制台。0.4.26.2 安装器会自动完成这两项设置，磁盘日志保留。
+安装器只支持放在游戏根目录运行，没有目录选择窗口。

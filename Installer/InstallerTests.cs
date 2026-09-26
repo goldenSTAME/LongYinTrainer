@@ -36,6 +36,17 @@ class InstallerTests
         Check(!InstallCore.HasCompatibleLoader(broken),"missing core requests repair");
         InstallCore.Apply(loader,broken);
         Check(InstallCore.HasCompatibleLoader(broken),"missing core repaired successfully");
+        InstallCore.ConfigureGameLoader(fresh);
+        string cfg=Path.Combine(fresh,"BepInEx/config/BepInEx.cfg");
+        Check(File.ReadAllText(cfg).Contains("UnityLogListening = false"),"fresh install disables crashing Unity log hook");
+        File.WriteAllText(cfg,"[Logging]\r\nUnityLogListening = true\r\n[Logging.Console]\r\nEnabled = true\r\n[Logging.Disk]\r\nEnabled = true\r\n[Other]\r\nKeep = custom\r\n");
+        InstallCore.ConfigureGameLoader(fresh);
+        string configured=File.ReadAllText(cfg);
+        Check(configured.Contains("UnityLogListening = false"),"upgrade fixes existing Unity log setting");
+        Check(configured.Contains("[Logging.Console]\r\nEnabled = false"),"disable extra console");
+        Check(configured.Contains("[Logging.Disk]\r\nEnabled = true") && configured.Contains("Keep = custom"),"preserve disk logs and other configuration");
+        InstallCore.ConfigureGameLoader(fresh);
+        Check(File.ReadAllText(cfg)==configured,"configuration update is idempotent");
         Console.WriteLine(count+" tests passed. Fixtures: "+root);
     }
 }
