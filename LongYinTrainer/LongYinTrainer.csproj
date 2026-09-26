@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GamePath Condition="'$(GamePath)' == ''">$(LONGYIN_GAME_PATH)</GamePath>
+    <AssemblyName>LongYinTrainer</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony"><HintPath>$(GamePath)\BepInEx\core\0Harmony.dll</HintPath></Reference>
+    <Reference Include="BepInEx.Core"><HintPath>$(GamePath)\BepInEx\core\BepInEx.Core.dll</HintPath></Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP"><HintPath>$(GamePath)\BepInEx\core\BepInEx.Unity.IL2CPP.dll</HintPath></Reference>
+    <Reference Include="Il2CppInterop.Common"><HintPath>$(GamePath)\BepInEx\core\Il2CppInterop.Common.dll</HintPath></Reference>
+    <Reference Include="Il2CppInterop.Runtime"><HintPath>$(GamePath)\BepInEx\core\Il2CppInterop.Runtime.dll</HintPath></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(GamePath)\BepInEx\interop\Assembly-CSharp.dll</HintPath></Reference>
+    <Reference Include="Il2Cppmscorlib"><HintPath>$(GamePath)\BepInEx\interop\Il2Cppmscorlib.dll</HintPath></Reference>
+    <Reference Include="spine-csharp"><HintPath>$(GamePath)\BepInEx\interop\spine-csharp.dll</HintPath></Reference>
+    <Reference Include="spine-unity"><HintPath>$(GamePath)\BepInEx\interop\spine-unity.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.IMGUIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.InputLegacyModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.ImageConversionModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.PhysicsModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.Physics2DModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.Physics2DModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.TextRenderingModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.UI.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.UIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.VideoModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.VideoModule.dll</HintPath></Reference>
+  </ItemGroup>
+  <Target Name="ValidateGamePath" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(GamePath)/BepInEx/interop/Assembly-CSharp.dll')" Text="请通过 -p:GamePath=游戏目录 或 LONGYIN_GAME_PATH 指定已生成 BepInEx interop 的游戏安装目录。" />
+  </Target>
+</Project>
