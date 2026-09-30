@@ -1,14 +1,14 @@
 # 龙胤立志传 修改器
 
-**新手推荐：[一键安装 EXE（修正版 0.4.27）](https://github.com/goldenSTAME/LongYinTrainer/raw/refs/heads/main/downloads/LongYinTrainer-Setup-0.4.27.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
+**新手推荐：[一键安装 EXE（修正版 0.4.29.5）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.29.5/LongYinTrainer-Setup-0.4.29.5.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
 
-**下载：[0.4.27 安装包](https://github.com/goldenSTAME/LongYinTrainer/raw/refs/heads/main/downloads/LongYinTrainer-0.4.27.zip) · [SHA256 校验](downloads/LongYinTrainer-0.4.27.zip.sha256)**
+**下载：[0.4.29.5 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.29.5/LongYinTrainer-0.4.29.5.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.29.5/LongYinTrainer-0.4.29.5.zip.sha256)**
 
 > **体验提醒：这是较为暴力的修改器，会明显破坏游戏数值平衡，降低战斗难度，改变养成和探索节奏，影响原本的游戏体验。建议先体验原版，使用前备份存档，并按需开启功能。展示截图为修改后的效果，不代表原版或默认开启效果。**
 
 **界面与文档语言：简体中文（zh-CN）｜开发语言：C#｜平台：Windows x64**
 
-《龙胤立志传》的 BepInEx IL2CPP 修改器，当前版本 **0.4.27**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
+《龙胤立志传》的 BepInEx IL2CPP 修改器，当前版本 **0.4.29.5**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
 
 **进入存档后按 H 打开 / 收起面板。H 只控制面板显示，各功能需要单独开启或应用；收起面板不会关闭已开启的功能。**
 
@@ -19,7 +19,7 @@
 ## 快速开始
 
 1. 首次使用先安装 **BepInEx 6 Unity IL2CPP Windows x64**，本机验证版本 `6.0.0-be.785`，下载步骤见安装教程。
-2. 下载 Release 附件 `LongYinTrainer-0.4.27.zip`，将其中的 `BepInEx` 文件夹合并到游戏根目录，与 `LongYinLiZhiZhuan.exe` 同级。GitHub 的 **Source code** 压缩包是源码，不是安装包。
+2. 下载 Release 附件 `LongYinTrainer-0.4.29.5.zip`，将其中的 `BepInEx` 文件夹合并到游戏根目录，与 `LongYinLiZhiZhuan.exe` 同级。GitHub 的 **Source code** 压缩包是源码，不是安装包。
 3. 启动游戏并读取存档，点击游戏窗口，按 **H** 打开“江湖札记”。
 4. 选择上方页签，开关类点击启用，数值类填写后点击对应的“应用”按钮。
 5. 查看底部状态提示确认结果，再按 **H** 收起面板继续游戏。
@@ -71,6 +71,9 @@
 
 
 
-## 0.4.27 更新
+## 0.4.29.5 更新
 物品修改页支持背包现有物品的名称、价值、等级、稀有度、重量和毒量。普通物品不再被装备类型限制挡住；原装备词条、坐骑属性保留在底部切换按钮中。
 
+
+## 0.4.29.5 更新
+适配游戏更新后的自创功法编辑器，统一势力与类别名称，改进本地图标加载和诊断；增加群战逐人处置、城市属性锁定及其他门派功绩编辑。最新图标行为仍待实机复测。

@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.27")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.29.5")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -121,6 +121,10 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         Config.Save();
         TrainerBehaviour.InitializeCustomKungfuStorage();
         _harmony = new Harmony("codex.longyin.trainer");
+        BuildingCombat.Install(_harmony, Config);
+        foreach (var method in typeof(AreaData).GetMethods())
+            if (method.Name is "ChangePeople" or "ChangeSafe" or "ChangeSupport" or "ChangeDefence" or "ChangeAreaState" or "ResetAllState")
+                _harmony.Patch(method, postfix: new HarmonyMethod(typeof(LongYinTrainerPlugin), nameof(CityStatePostfix)));
         var kungfuLevelCtor = AccessTools.Constructor(typeof(KungfuSkillLvData), new[] { typeof(int) });
         if (kungfuLevelCtor != null)
             _harmony.Patch(kungfuLevelCtor,
@@ -167,6 +171,7 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         Patch(typeof(BuildingButtonController), nameof(BuildingButtonController.OnClick), Type.EmptyTypes, nameof(BuildingButtonPrefix), null);
         Patch(typeof(KungfuSkillData), nameof(KungfuSkillData.GetSkillIcon), Type.EmptyTypes, null, nameof(KungfuDataIconPostfix));
         Patch(typeof(KungfuSkillLvData), nameof(KungfuSkillLvData.GetSkillIcon), Type.EmptyTypes, null, nameof(KungfuLevelIconPostfix));
+        Patch(typeof(TextureController), nameof(TextureController.LoadAtlasSprite), new[] { typeof(string), typeof(string) }, nameof(CustomIconAtlasPrefix), null);
         Patch(typeof(KungfuSkillLvData), nameof(KungfuSkillLvData.CDTimeTotal), Type.EmptyTypes, nameof(CustomKungfuCooldownPrefix), null);
         Patch(typeof(GameDataController), nameof(GameDataController.GetSkillDataBase), new[] { typeof(int) }, nameof(CustomKungfuDatabaseLookupPrefix), null);
         Patch(typeof(KungfuSkillLvData), nameof(KungfuSkillLvData.DataBase), Type.EmptyTypes, nameof(CustomKungfuLevelDatabasePrefix), null);
@@ -192,6 +197,10 @@ public sealed class LongYinTrainerPlugin : BasePlugin
     }
 
     private static void ForceResourcePostfix(ForceData __instance) => TrainerBehaviour.EnforceForceLock(__instance);
+    private static void CityStatePostfix(AreaData __instance)
+    {
+        if (CityStateLock.HasLocks) CityStateLock.Enforce(GameController.Instance?.worldData, __instance);
+    }
     private static void FullVisionPostfix(BigmapNpcController __instance) => TrainerBehaviour.ApplyNativeFullVision(__instance);
 
     private void Patch(Type type, string name, Type[] args, string? prefix, string? postfix)
@@ -231,7 +240,11 @@ public sealed class LongYinTrainerPlugin : BasePlugin
     private static void GameUpdatePostfix() => TrainerBehaviour.Tick();
     private static void OnGuiPostfix() => TrainerBehaviour.Render();
 
-    private static void CustomKungfuDatabasePrefix() => TrainerBehaviour.RegisterCustomKungfuDefinitions();
+    private static void CustomKungfuDatabasePrefix()
+    {
+        CityStateLock.Clear();
+        TrainerBehaviour.RegisterCustomKungfuDefinitions();
+    }
     private static void CustomKungfuDatabasePostfix() => TrainerBehaviour.RegisterCustomKungfuDefinitions();
 
     private static void CustomKungfuLevelCtorPrefix(ref int __0, out int __state)
@@ -283,6 +296,13 @@ public sealed class LongYinTrainerPlugin : BasePlugin
 
     private static void CustomKungfuSkillIconUpdatePostfix(SkillIconController __instance)
         => TrainerBehaviour.RefreshCustomKungfuSkillIcon(__instance);
+
+    private static bool CustomIconAtlasPrefix(string __0, string __1, ref Sprite __result)
+    {
+        if (__0 != "IconAtlas" || !TrainerBehaviour.TryResolveUploadedIcon(__1, out var sprite)) return true;
+        __result = sprite!;
+        return false;
+    }
 
     private static bool CustomKungfuQuickRangePrefix(QuickDetail __instance, KungfuSkillLvData __0)
     {
@@ -1053,6 +1073,9 @@ public static partial class TrainerBehaviour
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetOpenFileName(ref OpenFileName fileName);
 
+    [DllImport("comdlg32.dll")]
+    private static extern uint CommDlgExtendedError();
+
     [StructLayout(LayoutKind.Sequential)]
     private struct NativePoint
     {
@@ -1729,11 +1752,31 @@ public static partial class TrainerBehaviour
         if (!CustomKungfuIconDonors.TryGetValue(skillId, out var donorId)) return;
         try
         {
+            if (CustomKungfuIconFiles.TryGetValue(skillId, out var file))
+            {
+                var sprite = GetCustomKungfuIconSprite(file);
+                if (sprite != null)
+                {
+                    var key = "LongYinTrainer.Uploaded." + file;
+                    UploadedIconKeys[key] = sprite;
+                    iconName = key;
+                    return;
+                }
+            }
             var database = GameDataController.Instance;
             var donor = database == null ? null : OriginalKungfu(database, donorId);
             if (donor != null) iconName = donor.GetSkillIcon();
         }
         catch (Exception ex) { LongYinTrainerPlugin.Logger.LogDebug($"Custom kungfu icon fallback skipped: {ex.Message}"); }
+    }
+
+    private static readonly Dictionary<string, Sprite> UploadedIconKeys = new(StringComparer.Ordinal);
+    public static bool TryResolveUploadedIcon(string key, out Sprite? sprite)
+    {
+        sprite = null;
+        if (key == null || !UploadedIconKeys.TryGetValue(key, out var found) || found == null) return false;
+        sprite = found;
+        return true;
     }
 
     private static string CustomKungfuIconDirectory()
@@ -1746,48 +1789,60 @@ public static partial class TrainerBehaviour
         else CustomKungfuIconFiles[skillId] = normalized;
     }
 
+    private static readonly Dictionary<string, string> IconLoadErrors = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, float> IconRetryAt = new(StringComparer.OrdinalIgnoreCase);
+
     private static bool TryGetCustomKungfuIconTexture(int skillId, out Texture2D? texture, out string iconFile)
     {
         texture = null;
         iconFile = "";
         if (!CustomKungfuIconFiles.TryGetValue(skillId, out var configured)) return false;
         iconFile = NormalizeCustomKungfuIconFile(configured);
-        if (string.IsNullOrEmpty(iconFile)) return false;
-        if (CustomKungfuIconTextures.TryGetValue(iconFile, out texture)) return texture != null;
+        texture = LoadCustomIconTexture(iconFile);
+        return texture != null;
+    }
+
+    private static Texture2D? LoadCustomIconTexture(string file)
+    {
+        if (string.IsNullOrEmpty(file)) return null;
+        if (CustomKungfuIconTextures.TryGetValue(file, out var cached) && cached != null) return cached;
+        if (IconRetryAt.TryGetValue(file, out var retry) && Time.realtimeSinceStartup < retry) return null;
+        var path = Path.Combine(CustomKungfuIconDirectory(), file);
+        var stage = "读取文件";
+        Texture2D? texture = null;
         try
         {
-            var path = Path.Combine(CustomKungfuIconDirectory(), iconFile);
-            if (!File.Exists(path))
-            {
-                CustomKungfuIconTextures[iconFile] = null;
-                LongYinTrainerPlugin.Logger.LogWarning($"Uploaded custom-kungfu icon is missing: {path}");
-                return false;
-            }
-            Il2CppStructArray<byte> bytes = File.ReadAllBytes(path);
-            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
-            {
-                name = "LongYinTrainerCustomKungfu_" + Path.GetFileNameWithoutExtension(iconFile)
-            };
-            if (!ImageConversion.LoadImage(texture, bytes, false))
-            {
-                UnityEngine.Object.Destroy(texture);
-                texture = null;
-            }
-            else
-            {
-                texture = DownscaleCustomKungfuIcon(texture);
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = TextureWrapMode.Clamp;
-            }
-            CustomKungfuIconTextures[iconFile] = texture;
-            return texture != null;
+            var bytes = File.ReadAllBytes(path);
+            stage = $"解码图片（{bytes.Length} 字节）";
+            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            Il2CppStructArray<byte> nativeBytes = bytes;
+            if (!ImageConversion.LoadImage(texture, nativeBytes, false))
+                throw new InvalidOperationException("Unity LoadImage 返回 false");
+            stage = $"缩放图片（{texture.width}×{texture.height}）";
+            texture = DownscaleCustomKungfuIcon(texture);
+            texture.name = "LongYinTrainerCustomKungfu_" + Path.GetFileNameWithoutExtension(file);
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            UnityEngine.Object.DontDestroyOnLoad(texture);
+            CustomKungfuIconTextures[file] = texture;
+            IconLoadErrors.Remove(file); IconRetryAt.Remove(file);
+            LongYinTrainerPlugin.Logger.LogInfo($"Custom icon texture loaded: path={path}, size={texture.width}x{texture.height}, bytes={bytes.Length}");
+            return texture;
         }
         catch (Exception ex)
         {
-            CustomKungfuIconTextures[iconFile] = null;
-            LongYinTrainerPlugin.Logger.LogWarning($"Uploaded custom-kungfu icon could not be loaded: {ex.Message}");
-            return false;
+            if (texture != null) UnityEngine.Object.Destroy(texture);
+            CustomKungfuIconTextures.Remove(file);
+            RecordIconLoadError(file, path, stage, ex);
+            return null;
         }
+    }
+
+    private static void RecordIconLoadError(string file, string path, string stage, Exception ex)
+    {
+        IconLoadErrors[file] = $"{stage}失败：{ex.GetType().Name}：{ex.Message}";
+        IconRetryAt[file] = Time.realtimeSinceStartup + 5f;
+        LongYinTrainerPlugin.Logger.LogWarning($"Custom icon failure: stage={stage}, path={path}\n{ex}");
     }
 
     private static void PreloadCustomKungfuIcons()
@@ -1839,49 +1894,53 @@ public static partial class TrainerBehaviour
 
     private static Sprite? GetCustomKungfuIconSprite(string? iconFile)
     {
-        var normalized = NormalizeCustomKungfuIconFile(iconFile);
-        if (string.IsNullOrEmpty(normalized)) return null;
-        if (CustomKungfuIconSprites.TryGetValue(normalized, out var cached)) return cached;
-        var fakeId = int.MinValue;
-        foreach (var pair in CustomKungfuIconFiles)
-            if (string.Equals(pair.Value, normalized, StringComparison.OrdinalIgnoreCase)) { fakeId = pair.Key; break; }
-        Texture2D? texture;
-        if (fakeId == int.MinValue)
-        {
-            try
-            {
-                var path = Path.Combine(CustomKungfuIconDirectory(), normalized);
-                if (!File.Exists(path)) return null;
-                Il2CppStructArray<byte> bytes = File.ReadAllBytes(path);
-                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (!ImageConversion.LoadImage(texture, bytes, false))
-                {
-                    UnityEngine.Object.Destroy(texture);
-                    return null;
-                }
-                texture = DownscaleCustomKungfuIcon(texture);
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = TextureWrapMode.Clamp;
-                CustomKungfuIconTextures[normalized] = texture;
-            }
-            catch { return null; }
-        }
-        else if (!TryGetCustomKungfuIconTexture(fakeId, out texture, out _)) return null;
+        var file = NormalizeCustomKungfuIconFile(iconFile);
+        if (string.IsNullOrEmpty(file)) return null;
+        if (CustomKungfuIconSprites.TryGetValue(file, out var cached) && cached != null && cached.texture != null) return cached;
+        if (IconRetryAt.TryGetValue(file, out var retry) && Time.realtimeSinceStartup < retry) return null;
+        var texture = LoadCustomIconTexture(file);
         if (texture == null) return null;
-        var sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
-        sprite.name = "LongYinTrainerCustomKungfuSprite_" + Path.GetFileNameWithoutExtension(normalized);
-        CustomKungfuIconSprites[normalized] = sprite;
-        return sprite;
+        try
+        {
+            var sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+            if (sprite == null) throw new InvalidOperationException("Unity Sprite.Create 返回空对象");
+            sprite.name = "LongYinTrainerCustomKungfuSprite_" + Path.GetFileNameWithoutExtension(file);
+            UnityEngine.Object.DontDestroyOnLoad(sprite);
+            CustomKungfuIconSprites[file] = sprite;
+            return sprite;
+        }
+        catch (Exception ex)
+        {
+            RecordIconLoadError(file, Path.Combine(CustomKungfuIconDirectory(), file), "创建预览 Sprite", ex);
+            return null;
+        }
     }
 
     private static void ImportCustomKungfuIcon()
     {
         SyncCustomKungfuDraftFromInputs();
         if (_customDraft == null) return;
-        var selected = ShowCustomKungfuIconFilePicker();
-        if (string.IsNullOrEmpty(selected)) return;
         try
         {
+            var selected = ShowCustomKungfuIconFilePicker();
+            if (string.IsNullOrEmpty(selected)) { _customStatus = "已取消选择图片；也可以在下方粘贴图片完整路径导入。"; return; }
+            ImportCustomKungfuIconPath(selected);
+        }
+        catch (Exception ex)
+        {
+            _customStatus = "文件选择窗口打开失败，请改用下方路径导入：" + ex.Message;
+            LongYinTrainerPlugin.Logger.LogWarning("Custom icon file picker failed: " + ex);
+        }
+    }
+
+    private static void ImportCustomKungfuIconPath(string selected)
+    {
+        SyncCustomKungfuDraftFromInputs();
+        if (_customDraft == null) return;
+        try
+        {
+            selected = selected.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(selected)) throw new InvalidOperationException("请先粘贴图片的完整路径");
             var info = new FileInfo(selected);
             if (!info.Exists) throw new InvalidOperationException("所选图片不存在");
             if (info.Length <= 0 || info.Length > 8 * 1024 * 1024) throw new InvalidOperationException("图片大小必须在 8 MB 以内");
@@ -1906,9 +1965,9 @@ public static partial class TrainerBehaviour
             var fileName = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant() + extension;
             var destination = Path.Combine(CustomKungfuIconDirectory(), fileName);
             if (!File.Exists(destination)) File.Copy(info.FullName, destination, false);
+            IconRetryAt.Remove(fileName); // Explicit import always retries a previous failure.
+            if (GetCustomKungfuIconSprite(fileName) == null) throw new InvalidOperationException(IconLoadErrors.TryGetValue(fileName, out var reason) ? reason : "无法生成预览；请查看 BepInEx/LogOutput.log");
             _customDraft.CustomIconFile = fileName;
-            CustomKungfuIconTextures.Remove(fileName);
-            CustomKungfuIconSprites.Remove(fileName);
             if (_customBattlePreviewActive) SetRuntimeCustomKungfuIconFile(_customBattlePreviewSkillId, fileName);
             _customStatus = $"已导入本地图标：{info.Name}（{validatedWidth}×{validatedHeight}）；保存功法后永久生效。";
             InvalidateCustomKungfuPages();
@@ -1917,7 +1976,7 @@ public static partial class TrainerBehaviour
         catch (Exception ex)
         {
             _customStatus = "本地图标导入失败：" + ex.Message;
-            LongYinTrainerPlugin.Logger.LogWarning($"Custom kungfu icon import failed safely: {ex.Message}");
+            LongYinTrainerPlugin.Logger.LogWarning($"Custom kungfu icon import failed: path={selected}, exception={ex}");
         }
     }
 
@@ -1947,7 +2006,10 @@ public static partial class TrainerBehaviour
                 defaultExtension = "png",
                 templateName = null!
             };
-            return GetOpenFileName(ref dialog) ? Marshal.PtrToStringUni(fileBuffer) : null;
+            if (GetOpenFileName(ref dialog)) return Marshal.PtrToStringUni(fileBuffer);
+            var error = CommDlgExtendedError();
+            if (error != 0) throw new InvalidOperationException($"文件对话框错误 0x{error:X}");
+            return null;
         }
         finally
         {
@@ -2754,6 +2816,7 @@ public static partial class TrainerBehaviour
         _lastTickFrame = Time.frameCount;
         UpdateEventBadges();
         EnforceForceLock();
+        TickCityState();
         AnimatePageLoading();
         RemoveLegacyCustomKungfuQuickDetailOverlay();
         if (LongYinTrainerPlugin.ShowAllBigMapEvents.Value && Time.realtimeSinceStartup >= _nextBigMapEventRefreshAt)
@@ -2887,6 +2950,7 @@ public static partial class TrainerBehaviour
         if (_uiRoot != null) _uiRoot.SetActive(false);
         _customVisible = true;
         EnsureCustomKungfuUi();
+        if (!_customVisible || _customUiRoot == null) return;
         if (_customUiRoot != null) _customUiRoot.SetActive(true);
         ShowCustomKungfuTab();
         LongYinTrainerPlugin.Logger.LogInfo(_customBattlePreviewActive
@@ -2971,7 +3035,14 @@ public static partial class TrainerBehaviour
         }
         catch (Exception ex)
         {
+            _customVisible = false; // Retry only on an explicit reopen, never every frame.
             _customStatus = "自创功法界面创建失败：" + ex.Message;
+            _status = _customStatus;
+            InvalidateCustomKungfuPages();
+            CustomPermanentClicks.Clear();
+            CustomBuildClicks.Clear();
+            _customUiContent = null;
+            _customUiStatus = null;
             LongYinTrainerPlugin.Logger.LogError($"Custom kungfu UI creation failed: {ex}");
             if (_customUiRoot != null) UnityEngine.Object.Destroy(_customUiRoot);
             _customUiRoot = null;
@@ -3190,10 +3261,10 @@ public static partial class TrainerBehaviour
         try
         {
             var force = GameController.Instance?.worldData?.GetForce(forceId);
-            if (force != null) return force.GetForceName();
+            if (force != null) return force.GetForceName(true);
         }
         catch { }
-        return forceId == 0 ? "江湖／通用" : "势力";
+        return "未知势力";
     }
 
     private static List<CustomBasicChoice> GetCustomKungfuBasicChoices(string field, int current)
@@ -3207,18 +3278,10 @@ public static partial class TrainerBehaviour
 
         if (field == "type")
         {
-            try
-            {
-                var skills = GameDataController.Instance?.kungfuSkillDataBase;
-                if (skills != null)
-                    foreach (var pair in skills)
-                    {
-                        var skill = pair.Value;
-                        if (pair.Key >= CustomKungfuIdMin || skill == null || skill.hide || seen.Contains(skill.type)) continue;
-                        Add(skill.type, $"{skill.type} · {skill.TypeDescribe()}");
-                    }
-            }
-            catch { }
+            var names = GlobalData.FightSkillName;
+            if (names != null)
+                for (var value = 0; value < names.Count; value++)
+                    Add(value, CustomBasicChoiceLabel("type", value));
         }
         else if (field == "rare")
         {
@@ -3228,7 +3291,7 @@ public static partial class TrainerBehaviour
         else if (field == "force")
         {
             Add(-1, "-1 · 通用／无势力");
-            Add(0, "0 · 江湖／通用");
+
             try
             {
                 var forces = GameController.Instance?.worldData?.Forces;
@@ -3236,7 +3299,7 @@ public static partial class TrainerBehaviour
                     for (var i = 0; i < forces.Count; i++)
                     {
                         var force = forces[i];
-                        if (force != null) Add(force.forceID, $"{force.forceID} · {force.GetForceName()}");
+                        if (force != null) Add(force.forceID, CustomBasicChoiceLabel("force", force.forceID));
                     }
             }
             catch { }
@@ -3401,15 +3464,9 @@ public static partial class TrainerBehaviour
 
     private static string CustomKungfuTypeName(int type)
     {
-        try
-        {
-            var database = GameDataController.Instance;
-            if (database?.kungfuSkillDataBase != null)
-                foreach (var pair in database.kungfuSkillDataBase)
-                    if (pair.Value != null && pair.Value.type == type) return pair.Value.TypeDescribe();
-        }
-        catch { }
-        return "未知类别";
+        var names = GlobalData.FightSkillName;
+        return names != null && type >= 0 && type < names.Count
+            ? names[type] : "未知类别";
     }
 
     private static string SkillTargetTypeName(int value) => Math.Clamp(value, 0, 5) switch
@@ -3783,7 +3840,22 @@ public static partial class TrainerBehaviour
         AddText(parent, customIconLabel, new Vector2(10, 310), new Vector2(535, 42), 15);
         AddCustomKungfuButton(parent, "选择本地图标", new Vector2(650, 310), new Vector2(265, 42), ImportCustomKungfuIcon);
         AddCustomKungfuButton(parent, "恢复来源图标", new Vector2(925, 310), new Vector2(315, 42), RestoreCustomKungfuDonorIcon);
+        AddText(parent, "窗口无法选择？粘贴 PNG/JPG 图片完整路径后导入：", new Vector2(10, 570), new Vector2(1000, 28), 15);
+        var iconPath = AddInput(parent, "", new Vector2(10, 607), new Vector2(920, 38));
+        AddCustomKungfuButton(parent, "从路径导入", new Vector2(945, 607), new Vector2(295, 38), () => ImportCustomKungfuIconPath(iconPath.text));
         var customIconSprite = GetCustomKungfuIconSprite(draftIcon.CustomIconFile);
+        if (customIconSprite == null && !string.IsNullOrEmpty(draftIcon.CustomIconFile))
+        {
+            var file = NormalizeCustomKungfuIconFile(draftIcon.CustomIconFile);
+            var reason = IconLoadErrors.TryGetValue(file, out var error) ? error : "图标尚未加载，请重新加载查看诊断。";
+            AddText(parent, reason + "\n完整诊断：BepInEx/LogOutput.log", new Vector2(10, 651), new Vector2(915, 48), 14);
+            AddCustomKungfuButton(parent, "重新加载已存图标", new Vector2(945, 651), new Vector2(295, 38), () =>
+            {
+                IconRetryAt.Remove(file);
+                InvalidateCustomKungfuPages();
+                ShowCustomKungfuTab();
+            });
+        }
         if (customIconSprite != null)
         {
             var preview = UiObject("CustomKungfuUploadedIconPreview", parent, new Vector2(56, 56), new Vector2(575, 302));
@@ -5063,7 +5135,7 @@ public static partial class TrainerBehaviour
             var closeText = AddText(titleBar.transform, "H  收起", new Vector2(910, 0), new Vector2(140, 36), 16, TextAnchor.MiddleRight);
             closeText.color = new Color(0.88f, 0.82f, 0.68f, 1f);
 
-            var tabNames = new[] { "战斗辅助", "角色数值", "背包物品", "物品修改", "打造／炼丹", "势力／开局", "更多功能", "突破自选" };
+            var tabNames = new[] { "战斗辅助", "角色数值", "背包物品", "物品修改", "打造／炼丹", "势力／开局", "更多功能", "突破自选", "城市属性" };
             var tabGap = 3f;
             var tabWidth = (1080f - tabGap * (tabNames.Length - 1)) / tabNames.Length;
             for (var i = 0; i < tabNames.Length; i++)
@@ -5493,6 +5565,7 @@ public static partial class TrainerBehaviour
                 case 5: BuildNativeFaction(); break;
                 case 6: BuildNativeExtras(); break;
                 case 7: BuildNativeBreakThroughChoice(); break;
+                case 8: BuildNativeCity(); break;
             }
             PageClickCache[_tab] = new List<UiClick>(PageClicks);
             DirtyPages.Remove(_tab);
@@ -5524,6 +5597,9 @@ public static partial class TrainerBehaviour
         AddNativeToggle(p, "战斗移动范围最大", 0, 264, () => MaxMove, v => MaxMove = v);
         AddNativeToggle(p, "技能快速充能", 0, 308, () => FastCharge, v => FastCharge = v);
         AddNativeToggle(p, "技能快速冷却", 0, 352, () => FastCooldown, v => FastCooldown = v);
+        AddNativeToggle(p, "在场同门亲友助战／逐人处置", 0, 410,
+            () => BuildingCombat.Enabled.Value, v => BuildingCombat.Enabled.Value = v);
+        AddText(p, "仇敌袭击：同场景同门亲友直接参战；胜后每人选择一次处置。", new Vector2(0, 452), new Vector2(500, 65));
 
         AddNativeToggle(p, "装备重量归零", 540, 0, () => NoEquipmentWeight, v => NoEquipmentWeight = v);
         AddNativeToggle(p, "背包重量归零", 540, 44, () => NoInventoryWeight, v => NoInventoryWeight = v);
@@ -5824,7 +5900,8 @@ public static partial class TrainerBehaviour
         name.color = new Color(0.08f, 0.07f, 0.055f, 1f);
     }
 
-    private static Sprite? GetItemSprite(string iconName) => string.IsNullOrWhiteSpace(iconName) ? null : GetRuntimeItemSprite(iconName);
+    private static Sprite? GetItemSprite(string iconName) => string.IsNullOrWhiteSpace(iconName) ? null
+        : TryResolveUploadedIcon(iconName, out var uploaded) ? uploaded : GetRuntimeItemSprite(iconName);
 
     private static Color RarityColor(int rareLv)
     {
@@ -6853,6 +6930,7 @@ public static partial class TrainerBehaviour
         AddText(p,
             "无限分配点会把天赋点、属性、战斗技能、生活技能的剩余点数锁定为 999。允许高级天赋仅放宽本次开局的初始领悟与前置条件；不会改变进入游戏后的领悟规则。天赋上限范围 1–1000。",
             new Vector2(540, 265), new Vector2(490, 145), 16);
+        BuildOtherSectMerit(p);
     }
 
     private static void SetUnlockInheritedTalents(bool enabled)

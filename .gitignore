@@ -22,3 +22,12 @@ dist/
 
 !Installer/
 !Installer/*.cs
+!CombatRegression/
+!CombatRegression/*.cs
+!CombatRegression/*.csproj
+!CityRegression/
+!CityRegression/*.cs
+!CityRegression/*.csproj
+
+# Private publishing notes (local only)
+/docs/RELEASE.md
