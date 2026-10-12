@@ -11,6 +11,7 @@ using System.Windows.Forms;
 
 internal static class InstallCore
 {
+    internal const string ModVersion = "0.4.30.4";
     internal const string LoaderUrl = "https://builds.bepinex.dev/projects/bepinex_be/785/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.785%2B6abdba4.zip";
     internal const string LoaderHash = "2A7CBF74D26ABE4765C3E662DB1721B923BAC39849EBFEF2CA5DC7DE7E2D9B7F";
     internal static string Hash(string file)
@@ -127,9 +128,9 @@ internal sealed class InstallerWindow : Form
     string root = AppDomain.CurrentDomain.BaseDirectory; bool busy;
     public InstallerWindow()
     {
-        Text = "龙胤立志传 修改器 · 一键安装 0.4.29.5"; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
+        Text = "龙胤立志传 修改器 · 一键安装 " + InstallCore.ModVersion; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
         Font = new System.Drawing.Font("Microsoft YaHei UI",10); FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false;
-        info.SetBounds(22,20,570,175); info.Text="准备安装 BepInEx + 修改器 0.4.29.5…";
+        info.SetBounds(22,20,570,175); info.Text="准备安装 BepInEx + 修改器 " + InstallCore.ModVersion + "…";
         progress.SetBounds(22,205,570,22); progress.Style=ProgressBarStyle.Marquee;
         closeButton.SetBounds(22,246,190,36); closeButton.Text="关闭"; closeButton.Enabled=false;
         closeButton.Click += delegate { Close(); };

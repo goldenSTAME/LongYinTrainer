@@ -35,6 +35,8 @@ dotnet build .\LongYinTrainer\LongYinTrainer.csproj -c Release
 ```powershell
 dotnet run --project .\IconRegression\IconRegression.csproj -c Release
 dotnet run --project .\ForceLockRegression\ForceLockRegression.csproj -c Release
+dotnet run --project .\EventRegression\EventRegression.csproj -c Release
+dotnet run --project .\KungfuRegression\KungfuRegression.csproj -c Release
 ```
 
 这些测试使用模拟对象，不加载真实游戏。正式发布前还应验证打开面板、分类/翻页、图标来源、物品添加、资源锁定/解锁、切换存档、原生全视野，并检查游戏日志。先备份存档。

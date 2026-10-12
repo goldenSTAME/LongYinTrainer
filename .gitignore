@@ -31,3 +31,10 @@ dist/
 
 # Private publishing notes (local only)
 /docs/RELEASE.md
+
+!KungfuRegression/
+!KungfuRegression/*.cs
+!KungfuRegression/*.csproj
+!EventRegression/
+!EventRegression/*.cs
+!EventRegression/*.csproj

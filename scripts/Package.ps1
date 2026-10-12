@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$GamePath)
+﻿param([Parameter(Mandatory=$true)][string]$GamePath)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 & (Join-Path $PSScriptRoot 'Build.ps1') -GamePath $GamePath
@@ -14,6 +14,7 @@ New-Item -ItemType Directory -Path $plugins -Force | Out-Null
 Copy-Item (Join-Path $repo 'LongYinTrainer\bin\Release\net6.0\LongYinTrainer.dll') $plugins
 Copy-Item (Join-Path $repo 'docs\INSTALL.md') (Join-Path $stage 'INSTALL.md')
 Copy-Item (Join-Path $repo 'docs\USAGE.md') (Join-Path $stage 'USAGE.md')
+Copy-Item (Join-Path $repo 'docs\KUNGFU-EDITING.md') (Join-Path $stage 'KUNGFU-EDITING.md')
 $zip=Join-Path $dist "LongYinTrainer-$version.zip"
 if(Test-Path -LiteralPath $zip){throw "文件已存在，请先重命名旧包：$zip"}
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
