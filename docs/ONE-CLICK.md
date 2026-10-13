@@ -1,8 +1,8 @@
 # 一键安装：BepInEx + 龙胤立志传 修改器
 
-安装器修正版 **0.4.30.4**，内置 Mod 为 0.4.30.4。
+安装器修正版 **0.4.30.5**，内置 Mod 为 0.4.30.5。
 
-1. 下载 Release 中的 `LongYinTrainer-Setup-0.4.30.4.exe`。
+1. 下载 Release 中的 `LongYinTrainer-Setup-0.4.30.5.exe`。
 2. 退出游戏，把 EXE 放到 `LongYinLiZhiZhuan.exe` 同级，双击。
 3. 等待安装完成，启动游戏、读取存档，按 **H**。
 

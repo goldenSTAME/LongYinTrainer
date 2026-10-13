@@ -11,7 +11,7 @@ using System.Windows.Forms;
 
 internal static class InstallCore
 {
-    internal const string ModVersion = "0.4.30.4";
+    internal const string ModVersion = "0.4.30.5";
     internal const string LoaderUrl = "https://builds.bepinex.dev/projects/bepinex_be/785/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.785%2B6abdba4.zip";
     internal const string LoaderHash = "2A7CBF74D26ABE4765C3E662DB1721B923BAC39849EBFEF2CA5DC7DE7E2D9B7F";
     internal static string Hash(string file)

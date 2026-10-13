@@ -103,7 +103,79 @@ public static partial class TrainerBehaviour
             "previous page restores rows without UI rebuild");
         uiActions["随机类型"]();
         Check(_spawnEventType==null && uiObjects==retainedObjects, "random selection updates in place");
+        RunWorldEventTests(Check);
         Console.WriteLine("All event spawning regression checks passed (mock game; native runtime requires in-game verification).");
+    }
+
+    private static void RunWorldEventTests(Action<bool,string> check)
+    {
+        var database = RandomEventController.Instance;
+        var world = GameController.Instance.worldData!;
+        var map = BigMapController.Instance;
+        var wu = new WorldEventDataBase {id=20,name="武学奇才",lastTime=20,eventRandomArea=WorldEventRandomArea.BigMap,
+            eventData=new EventData {id=0,eventName="武学奇才",leftTime=0}};
+        var ghost = new WorldEventDataBase {id=23,name="中元鬼市",lastTime=30,eventRandomArea=WorldEventRandomArea.BigMap,
+            eventData=new EventData {id=0,eventName="中元鬼市"},startMonth=7,startDay=15};
+        database.worldEventDataBase.AddRange(new[] {wu,ghost,
+            new WorldEventDataBase {id=1,name="拍卖大会",eventRandomArea=WorldEventRandomArea.RandomCity},
+            new WorldEventDataBase {id=2,name="元宵",eventRandomArea=WorldEventRandomArea.AllCity},
+            new WorldEventDataBase {id=3,name="门派大比",eventRandomArea=WorldEventRandomArea.SelfForce},
+            new WorldEventDataBase {id=4,name="area flag",eventRandomArea=WorldEventRandomArea.BigMap,eventData=new() {isAreaEvent=true}},
+            new WorldEventDataBase {id=5,name="mission",eventRandomArea=WorldEventRandomArea.BigMap,eventData=new() {missionTargetEvent=true}},
+            wu});
+        var pool=SpawnableMapEventIds();
+        check(pool.Contains(20) && pool.Contains(~20) && pool.Count(k=>k==~20)==1 && pool.Contains(~23),
+            "separate normal/world ID namespaces; overworld dated event included and deduplicated");
+        check(!pool.Contains(~1) && !pool.Contains(~2) && !pool.Contains(~3) && !pool.Contains(~4) && !pool.Contains(~5),
+            "city, all-city, sect, area-only and mission events excluded");
+        var normalCount=world.BigMapRandomEventDatas.Count;
+        var worldCount=world.WorldEventDatas.Count;
+        world.player.bigMapPos=new();
+        _spawnEventType=~20;
+        _spawnEventRarity=5;
+        SpawnMapEventNearPlayer();
+        var created=world.BigMapRandomEventDatas.Last();
+        check(created.Name()=="武学奇才" && created.GetEventRareLv()==5 && created.leftTime==20 && created.speTargetID==-1 &&
+            world.WorldEventDatas.Last()==created && world.BigMapRandomEventDatas.Count==normalCount+1 && world.WorldEventDatas.Count==worldCount+1,
+            "red Wu encounter independently spawned and registered in map and world lists with native lifetime");
+        check(!wu.eventData.seen && wu.eventData.leftTime==0 && wu.eventData.difficulty==0,
+            "world encounter template unchanged");
+        _spawnEventType=~23;
+        _spawnEventRarity=4;
+        SpawnMapEventNearPlayer();
+        created=world.BigMapRandomEventDatas.Last();
+        check(created.Name()=="中元鬼市" && created.leftTime==30 && created.GetEventRareLv()==4 &&
+            ghost.startMonth==7 && ghost.startDay==15 && world.currentMonth==1,
+            "dated overworld ghost market spawns now without changing calendar or automatic schedule");
+        normalCount=world.BigMapRandomEventDatas.Count;
+        worldCount=world.WorldEventDatas.Count;
+        var iconCount=map.bigmapRandomEventIcons.Count;
+        _spawnEventType=~20;
+        map.throwAfterIcon=true;
+        SpawnMapEventNearPlayer();
+        check(world.BigMapRandomEventDatas.Count==normalCount && world.WorldEventDatas.Count==worldCount && map.bigmapRandomEventIcons.Count==iconCount,
+            "world icon failure does not leave map or world entries");
+        map.throwAfterIcon=false;
+        WorldEventController.Instance!.throwAfterRegister=true;
+        SpawnMapEventNearPlayer();
+        check(world.BigMapRandomEventDatas.Count==normalCount && world.WorldEventDatas.Count==worldCount && map.bigmapRandomEventIcons.Count==iconCount,
+            "partial world registration failure rolls back both lists and icon while retaining previous events");
+        WorldEventController.Instance.throwAfterRegister=false;
+        var controller=WorldEventController.Instance;
+        WorldEventController.Instance=null;
+        SpawnMapEventNearPlayer();
+        check(world.BigMapRandomEventDatas.Count==normalCount && world.WorldEventDatas.Count==worldCount,
+            "unavailable world controller rejected before mutation");
+        WorldEventController.Instance=controller;
+        _spawnEventType=20;
+        SpawnMapEventNearPlayer();
+        check(world.BigMapRandomEventDatas.Last().Name()=="B" && world.WorldEventDatas.Count==worldCount,
+            "normal event with overlapping ID still resolves original template and stays out of world registry");
+        uiActions["刷新类型"]();
+        _spawnEventType=~20;
+        RefreshSpawnEventPage();
+        check(_spawnTypeLabel!.text.Contains("武学奇才") && _spawnTypeLabel.text.Contains("江湖传闻"),
+            "world selection label uses correct namespace");
     }
 }
 
@@ -111,7 +183,7 @@ public class EventData
 {
     private static int next;
     public IntPtr Pointer = (IntPtr)(++next);
-    public int id, resourcePointID, nearAreaID, nearAreaDirection, randomSeed, leftTime;
+    public int id, resourcePointID, nearAreaID, nearAreaDirection, randomSeed, leftTime, speTargetID;
     public string eventName = "";
     public bool isAreaEvent, plotTargetEvent, missionTargetEvent, seen, noticed, hovered, happened, inaccuracyPosText;
     public float difficulty;
@@ -136,6 +208,8 @@ public class World
 {
     public HeroData player = new();
     public Il2CppSystem.Collections.Generic.List<EventData> BigMapRandomEventDatas = new();
+    public Il2CppSystem.Collections.Generic.List<EventData> WorldEventDatas = new();
+    public int currentMonth=1;
     public HeroData Player() => player;
 }
 public class GameController { public static GameController Instance = new(); public World? worldData = new(); }
@@ -145,7 +219,27 @@ public class RandomEventController
     public static RandomEventController Instance = new();
     public List<int> bigMapRandomEventID = new();
     public Dictionary<int,EventData> templates = new();
+    public List<WorldEventDataBase> worldEventDataBase = new();
+    public WorldEventDataBase? GetWorldEventDataBase(int id) => worldEventDataBase.FirstOrDefault(w=>w.id==id);
     public EventData? GetRandomEventDataBase(int id) => templates.GetValueOrDefault(id);
+}
+public enum WorldEventRandomArea { RandomCity, AllCity, SelfForce, BigMap }
+public class WorldEventDataBase
+{
+    public int id,lastTime,startMonth,startDay;
+    public string name="";
+    public WorldEventRandomArea eventRandomArea;
+    public EventData eventData=new();
+}
+public class WorldEventController
+{
+    public static WorldEventController? Instance=new();
+    public bool throwAfterRegister;
+    public void AddNewWorldEvent(EventData e)
+    {
+        GameController.Instance.worldData!.WorldEventDatas.Add(e);
+        if(throwAfterRegister) throw new InvalidOperationException("injected world registry failure");
+    }
 }
 public class BigMapRandomEventController
 {

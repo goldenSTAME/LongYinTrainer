@@ -1,20 +1,29 @@
 # 龙胤立志传 修改器
 
-**新手推荐：[一键安装 EXE（修正版 0.4.30.4）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.4/LongYinTrainer-Setup-0.4.30.4.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
+**新手推荐：[一键安装 EXE（修正版 0.4.30.5）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.5/LongYinTrainer-Setup-0.4.30.5.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
 
-**下载：[0.4.30.4 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.4/LongYinTrainer-0.4.30.4.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.4/LongYinTrainer-0.4.30.4.zip.sha256)**
+**下载：[0.4.30.5 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.5/LongYinTrainer-0.4.30.5.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.5/LongYinTrainer-0.4.30.5.zip.sha256)**
 
 > **体验提醒：这是较为暴力的修改器，会明显破坏游戏数值平衡，降低战斗难度，改变养成和探索节奏，影响原本的游戏体验。建议先体验原版，使用前备份存档，并按需开启功能。展示截图为修改后的效果，不代表原版或默认开启效果。**
 
 **界面与文档语言：简体中文（zh-CN）｜开发语言：C#｜平台：Windows x64**
 
-《龙胤立志传》的 BepInEx IL2CPP 修改器，版本 **0.4.30.4**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
+《龙胤立志传》的 BepInEx IL2CPP 修改器，版本 **0.4.30.5**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
 
 **进入存档后按 H 打开 / 收起面板。H 只控制面板显示，各功能需要单独开启或应用；收起面板不会关闭已开启的功能。**
 
 - [首次安装：BepInEx 下载与安装教程](docs/INSTALL.md)
 - [使用说明：快捷键、物品、资源锁定与突破自选](docs/USAGE.md)
 - [开发者：编译、打包与发布教程](docs/BUILD.md)
+
+## 0.4.30.5 更新（2026-10-13）
+
+- 补齐武学奇才等十种大地图世界奇遇，以及日期相关的中元鬼市。
+- 普通与世界奇遇编号分别处理；世界奇遇同步登记江湖传闻，保留原版有效期。
+- 手动生成不受出现日期限制，不改游戏日期；排除原版城镇及门派内部事件。
+- 保留指定品质、随机／指定类型和控件复用翻页。
+
+编译与模拟回归通过；新增世界奇遇的实际触发、奖励及存档读回仍待游戏内验证。
 
 ## 0.4.30.4 更新（2026-10-12）
 
@@ -28,7 +37,7 @@
 ## 快速开始
 
 1. 首次使用先安装 **BepInEx 6 Unity IL2CPP Windows x64**，本机验证版本 `6.0.0-be.785`，下载步骤见安装教程。
-2. 下载 Release 附件 `LongYinTrainer-0.4.30.4.zip`，将其中的 `BepInEx` 文件夹合并到游戏根目录，与 `LongYinLiZhiZhuan.exe` 同级。GitHub 的 **Source code** 压缩包是源码，不是安装包。
+2. 下载 Release 附件 `LongYinTrainer-0.4.30.5.zip`，将其中的 `BepInEx` 文件夹合并到游戏根目录，与 `LongYinLiZhiZhuan.exe` 同级。GitHub 的 **Source code** 压缩包是源码，不是安装包。
 3. 启动游戏并读取存档，点击游戏窗口，按 **H** 打开“江湖札记”。
 4. 选择上方页签，开关类点击启用，数值类填写后点击对应的“应用”按钮。
 5. 查看底部状态提示确认结果，再按 **H** 收起面板继续游戏。

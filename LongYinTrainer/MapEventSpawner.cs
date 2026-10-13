@@ -14,6 +14,15 @@ public static partial class TrainerBehaviour
     private static readonly Text?[] SpawnRarityLabels = new Text?[6];
     private static Text? _spawnTypeLabel, _spawnPageLabel;
 
+    // World and ordinary event IDs overlap. Encode world IDs as ~id so a
+    // selected world encounter cannot accidentally resolve an ordinary event.
+    private static WorldEventDataBase? SpawnWorldDefinition(int key) => key < 0
+        ? RandomEventController.Instance?.GetWorldEventDataBase(~key) : null;
+    private static EventData? SpawnEventTemplate(int key) => key < 0
+        ? SpawnWorldDefinition(key)?.eventData : RandomEventController.Instance?.GetRandomEventDataBase(key);
+    private static string SpawnEventLabel(int key) => (SpawnEventTemplate(key)?.Name() ?? "类型不可用") +
+        (key < 0 ? "  [江湖传闻]" : "  [" + key + "]");
+
     private static void RefreshSpawnEventPage(int delta = 0)
     {
         var pages = Math.Max(1, (_spawnEventIds.Count + SpawnEventPageSize - 1) / SpawnEventPageSize);
@@ -21,7 +30,7 @@ public static partial class TrainerBehaviour
         if (_spawnEventType.HasValue && !_spawnEventIds.Contains(_spawnEventType.Value)) _spawnEventType = null;
         if (_spawnTypeLabel != null)
             _spawnTypeLabel.text = "当前类型：" + (_spawnEventType.HasValue
-                ? RandomEventController.Instance.GetRandomEventDataBase(_spawnEventType.Value)?.Name() ?? "类型不可用" : "随机类型");
+                ? SpawnEventLabel(_spawnEventType.Value) : "随机类型");
         if (_spawnPageLabel != null)
             _spawnPageLabel.text = $"{_spawnEventPage + 1} / {pages} 页 · {_spawnEventIds.Count} 种大地图奇遇";
         for (var row = 0; row < SpawnEventPageSize; row++)
@@ -30,11 +39,11 @@ public static partial class TrainerBehaviour
             if (slot == null) continue;
             var index = _spawnEventPage * SpawnEventPageSize + row;
             var template = index < _spawnEventIds.Count
-                ? RandomEventController.Instance.GetRandomEventDataBase(_spawnEventIds[index]) : null;
+                ? SpawnEventTemplate(_spawnEventIds[index]) : null;
             slot.gameObject.SetActive(template != null);
             if (template == null) continue;
             var id = _spawnEventIds[index];
-            slot.GetComponentInChildren<Text>().text = (_spawnEventType == id ? "✓ " : "") + template.Name() + "  [" + id + "]";
+            slot.GetComponentInChildren<Text>().text = (_spawnEventType == id ? "✓ " : "") + SpawnEventLabel(id);
         }
     }
 
@@ -54,19 +63,30 @@ public static partial class TrainerBehaviour
     }
 
     // Read the native overworld pool afresh; do not retain IL2CPP event wrappers
-    // across loading a different save. Never include mission or world-event pools.
+    // across loading a different save. Include world encounters with a native
+    // BigMap placement, without applying the automatic scheduler's date gates.
+    // City, village, inn and sect-interior events stay outside this catalog.
     private static List<int> SpawnableMapEventIds()
     {
         var result = new List<int>();
         var database = RandomEventController.Instance;
         var ids = database?.bigMapRandomEventID;
-        if (ids == null) return result;
-        foreach (var id in ids)
+        if (ids != null) foreach (var id in ids)
         {
             var template = database!.GetRandomEventDataBase(id);
             if (template == null || template.isAreaEvent || template.plotData == null ||
                 template.plotTargetEvent || template.missionTargetEvent || result.Contains(id)) continue;
             result.Add(id);
+        }
+        var worldTemplates = database?.worldEventDataBase;
+        if (worldTemplates != null) foreach (var definition in worldTemplates)
+        {
+            if (definition == null || definition.id < 0 || definition.eventRandomArea != WorldEventRandomArea.BigMap) continue;
+            var template = definition.eventData;
+            var key = ~definition.id;
+            if (template == null || template.isAreaEvent || template.plotData == null ||
+                template.plotTargetEvent || template.missionTargetEvent || result.Contains(key)) continue;
+            result.Add(key);
         }
         return result;
     }
@@ -108,7 +128,7 @@ public static partial class TrainerBehaviour
         AddButton(p, "刷新类型", new Vector2(880, 394), new Vector2(165, 36), () =>
         { _spawnEventIds = SpawnableMapEventIds(); RefreshSpawnEventPage(); });
         AddButton(p, "在主角身边生成一个", new Vector2(0, 451), new Vector2(1045, 44), SpawnMapEventNearPlayer);
-        AddText(p, "请在大地图行走状态使用。每次生成一个已发现的原版奇遇，收起面板后点击地图图标前往。\n品质同时决定事件难度；奖励按原版事件规则结算。新奇遇会随正常游戏存档保存，仍有原版有效期。",
+        AddText(p, "包含武学奇才等世界奇遇及大地图中元鬼市，手动生成不受出现日期限制；不含城镇或门派内部事件。\n品质同时决定难度；奖励按原版规则结算。世界奇遇同步登记江湖传闻，保留原版有效期。",
             new Vector2(0, 514), new Vector2(1045, 100), 16);
         RefreshSpawnEventPage();
     }
@@ -118,6 +138,7 @@ public static partial class TrainerBehaviour
         EventData? created = null;
         BigMapController? map = null;
         Il2CppSystem.Collections.Generic.List<EventData>? events = null;
+        Il2CppSystem.Collections.Generic.List<EventData>? worldEvents = null;
         var registered = false;
         try
         {
@@ -136,8 +157,16 @@ public static partial class TrainerBehaviour
             if (ids.Count == 0) throw new InvalidOperationException("大地图奇遇类型尚未载入，请刷新类型。");
             var id = _spawnEventType ?? ids[UnityEngine.Random.Range(0, ids.Count)];
             if (!ids.Contains(id)) throw new InvalidOperationException("所选类型已不可用，请刷新类型。");
-            var template = RandomEventController.Instance.GetRandomEventDataBase(id)
+            var definition = SpawnWorldDefinition(id);
+            var template = SpawnEventTemplate(id)
                 ?? throw new InvalidOperationException("所选奇遇模板已不可用，请刷新类型。");
+            var worldController = id < 0 ? WorldEventController.Instance : null;
+            if (id < 0)
+            {
+                if (definition == null || worldController == null)
+                    throw new InvalidOperationException("世界奇遇控制器尚未准备好。");
+                worldEvents = world.WorldEventDatas ?? throw new InvalidOperationException("江湖传闻列表不可用。");
+            }
             created = template.Clone().Cast<EventData>();
             created.difficulty = _spawnEventRarity * 2f;
             if (created.GetEventRareLv() != _spawnEventRarity)
@@ -151,6 +180,13 @@ public static partial class TrainerBehaviour
             created.happened = false;
             created.plotTargetEvent = false;
             created.missionTargetEvent = false;
+            if (definition != null)
+            {
+                // Match the native CreateWorldEvent(EventData, ...) initialization.
+                // Do not alter the scheduler's dates, completion record or world clock.
+                created.leftTime = definition.lastTime;
+                created.speTargetID = -1;
+            }
             created.randomSeed = UnityEngine.Random.Range(1, int.MaxValue);
             created.isAreaEvent = false;
             created.resourcePointID = -1;
@@ -177,6 +213,7 @@ public static partial class TrainerBehaviour
                 break;
             }
             if (!found) throw new InvalidOperationException("原生奇遇图标未创建成功。");
+            if (definition != null) worldController!.AddNewWorldEvent(created);
             _status = $"已在主角附近生成：{created.Name()} · {RarityName(_spawnEventRarity)}。收起面板后点击奇遇图标前往。";
             LongYinTrainerPlugin.Logger.LogInfo($"Spawned map event id={id}, rarity={created.GetEventRareLv()}, difficulty={created.difficulty}, pos={created.bigMapPos.x},{created.bigMapPos.y}");
         }
@@ -186,6 +223,7 @@ public static partial class TrainerBehaviour
             if (registered && created != null)
             {
                 events?.Remove(created);
+                worldEvents?.Remove(created);
                 var icons = map?.bigmapRandomEventIcons;
                 if (icons != null)
                     for (var i = icons.Count - 1; i >= 0; i--)
