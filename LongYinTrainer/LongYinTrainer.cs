@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.30.5")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.30.19")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -157,8 +157,9 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         Patch(typeof(PlayerPrefDictionary), nameof(PlayerPrefDictionary.GetInt), new[] { typeof(string) }, nameof(InheritedTalentPrefIntPrefix), null);
         Patch(typeof(BattleController), nameof(BattleController.BattleTimeScaleButtonClicked), new[] { typeof(GameObject) }, null, nameof(BattleSpeedPostfix));
         Patch(typeof(BattleController), nameof(BattleController.BattleRealEnd), Type.EmptyTypes, null, nameof(CustomKungfuBattleEndedPostfix));
-        Patch(typeof(GameController), nameof(GameController.ChangeDay), Type.EmptyTypes, nameof(FreezeDatePrefix), null);
-        Patch(typeof(GameController), nameof(GameController.ChangeDay), new[] { typeof(int) }, nameof(FreezeDatePrefix), null);
+        Patch(typeof(BattleController), nameof(BattleController.StartBattleButtonClicked), Type.EmptyTypes, nameof(BattleSkillBarResetPrefix), null);
+        Patch(typeof(BattleController), nameof(BattleController.SetNowActiveUnitUI), Type.EmptyTypes, nameof(BattleSkillBarBindPrefix), nameof(BattleSkillBarBindPostfix));
+        DateFreezeControl.Initialize(FreezeDate, Logger);
         Patch(typeof(HorseData), nameof(HorseData.StartSprint), Type.EmptyTypes, null, nameof(HorseSprintPostfix));
         Patch(typeof(HorseData), nameof(HorseData.ChangeNowPower), new[] { typeof(float) }, nameof(HorseStaminaPrefix), null);
         Patch(typeof(HeroData), nameof(HeroData.GetHorseTravelSpeed), Type.EmptyTypes, null, nameof(HorseSpeedPostfix));
@@ -177,7 +178,9 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         Patch(typeof(KungfuSkillLvData), nameof(KungfuSkillLvData.CDTimeTotal), Type.EmptyTypes, nameof(CustomKungfuCooldownPrefix), null);
         Patch(typeof(GameDataController), nameof(GameDataController.GetSkillDataBase), new[] { typeof(int) }, nameof(CustomKungfuDatabaseLookupPrefix), null);
         Patch(typeof(KungfuSkillLvData), nameof(KungfuSkillLvData.DataBase), Type.EmptyTypes, nameof(CustomKungfuLevelDatabasePrefix), null);
-        Patch(typeof(SkillIconController), nameof(SkillIconController.Update), Type.EmptyTypes, null, nameof(CustomKungfuSkillIconUpdatePostfix));
+        // SkillIconController.Update stays entirely native. Custom definitions
+        // and uploaded images are supplied through database/resource lookups;
+        // a per-frame visual overlay repeats work after native skill refreshes.
         Patch(typeof(QuickDetail), nameof(QuickDetail.RefreshSkillRangeUI), new[] { typeof(KungfuSkillLvData) }, nameof(CustomKungfuQuickRangePrefix), null);
         Patch(typeof(BigMapRandomEventController), nameof(BigMapRandomEventController.Init), Type.EmptyTypes, null, nameof(BigMapEventInitPostfix));
         Patch(typeof(BigMapController), nameof(BigMapController.RecreatAllBigMapRandomEvent), Type.EmptyTypes, nameof(BigMapEventsRecreatedPrefix), nameof(BigMapEventsRecreatedPostfix));
@@ -253,6 +256,7 @@ public sealed class LongYinTrainerPlugin : BasePlugin
     {
         TrainerBehaviour.ResetOriginalKungfuSources();
         TrainerBehaviour.RegisterCustomKungfuDefinitions();
+        TrainerBehaviour.RunRequestedUtilityAudit();
     }
 
     private static void CustomKungfuLevelCtorPrefix(ref int __0, out int __state)
@@ -302,8 +306,6 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         return false;
     }
 
-    private static void CustomKungfuSkillIconUpdatePostfix(SkillIconController __instance)
-        => TrainerBehaviour.RefreshCustomKungfuSkillIcon(__instance);
 
     private static bool CustomIconAtlasPrefix(string __0, string __1, ref Sprite __result)
     {
@@ -326,7 +328,42 @@ public sealed class LongYinTrainerPlugin : BasePlugin
     private static void BigMapEventInitPostfix(BigMapRandomEventController __instance) => TrainerBehaviour.RevealBigMapEventIcon(__instance);
     private static void BigMapEventsRecreatedPrefix() => TrainerBehaviour.ClearBigMapEventOverlays();
     private static void BigMapEventsRecreatedPostfix() => TrainerBehaviour.RefreshBigMapEventVisibility();
-    private static void CustomKungfuBattleEndedPostfix() => TrainerBehaviour.NotifyCustomKungfuBattleEnded();
+    private static void CustomKungfuBattleEndedPostfix()
+    {
+        BattleSkillBarBinding.Clear();
+        TrainerBehaviour.NotifyCustomKungfuBattleEnded();
+    }
+
+    private static void BattleSkillBarResetPrefix() => BattleSkillBarBinding.Clear();
+
+    private static bool BattleSkillBarBindPrefix(BattleController __instance, out bool __state)
+    {
+        __state = false;
+        try
+        {
+            // The normal native update loop already handles visibility, values,
+            // buffs and input. Reuse requires no extra refresh or UI writes.
+            if (BattleSkillBarBinding.CanReuse(__instance)) return false;
+        }
+        catch (Exception ex)
+        {
+            BattleSkillBarBinding.Clear();
+            Logger.LogDebug($"Skill bar binding reuse fell back to native: {ex.Message}");
+        }
+        __state = true;
+        return true;
+    }
+
+    private static void BattleSkillBarBindPostfix(BattleController __instance, bool __state)
+    {
+        if (!__state) return;
+        try { BattleSkillBarBinding.Remember(__instance); }
+        catch (Exception ex)
+        {
+            BattleSkillBarBinding.Clear();
+            Logger.LogDebug($"Skill bar binding cache skipped: {ex.Message}");
+        }
+    }
 
     private static bool CountHeroDataPrefix(HeroData hero)
     {
@@ -656,7 +693,6 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         return (int)Math.Min(999999L, scaled);
     }
 
-    private static bool FreezeDatePrefix() => !FreezeDate.Value;
 
     private static void BattleSpeedPostfix()
     {
@@ -812,6 +848,7 @@ public static partial class TrainerBehaviour
     {
         public int Id;
         public bool EditOriginal;
+        public bool RemovedContent;
         public string Name = "自创功法";
         public string Description = "由藏经阁推演而成的自创功法。";
         public int Type;
@@ -870,21 +907,6 @@ public static partial class TrainerBehaviour
         public string Name = "";
         public int Type;
         public int RareLv;
-    }
-
-    private sealed class CustomKungfuIconOverlayState
-    {
-        public int SkillId = int.MinValue;
-        public GameObject? Overlay;
-        public UISprite? Source;
-        public Image? ImageSource;
-        public Sprite? SourceSprite;
-        public Sprite? AppliedSprite;
-        public Color SourceColor;
-        public string IconFile = "";
-        public string SkillName = "";
-        public readonly List<Text> NameTexts = new();
-        public readonly List<string> OriginalText = new();
     }
 
     private sealed class CustomBasicChoice
@@ -1013,7 +1035,6 @@ public static partial class TrainerBehaviour
     private static readonly Dictionary<int, int> CustomKungfuBaseDonors = new();
     private static readonly Dictionary<string, Texture2D?> CustomKungfuIconTextures = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Sprite?> CustomKungfuIconSprites = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<IntPtr, CustomKungfuIconOverlayState> CustomKungfuIconOverlays = new();
     private static readonly Dictionary<IntPtr, GameObject> BigMapEventOverlays = new();
 
     private static float _nextBigMapEventRefreshAt;
@@ -1060,7 +1081,6 @@ public static partial class TrainerBehaviour
     private static KungfuSkillLvData? _customBattlePreviewSkill;
     private static bool _orphanCustomKungfuScrubbed;
     private static int _customCountBypassLogCount;
-    private static readonly HashSet<IntPtr> LoggedCustomSkillIconPointers = new();
     private static bool _legacyCustomKungfuQuickDetailRemoved;
     private static readonly Dictionary<string, InputField> CustomInputs = new();
     private static readonly List<UiClick> CustomPermanentClicks = new();
@@ -1136,6 +1156,7 @@ public static partial class TrainerBehaviour
         public int ItemTypeValue;
         public int ItemSubType;
         public int SkillId;
+        public int SkillType = -1;
         public bool IsEquipment;
         public CatalogKind Kind;
     }
@@ -1380,11 +1401,28 @@ public static partial class TrainerBehaviour
         for (var i = 0; i < _customKungfuStore.Skills.Count; i++)
         {
             var record = _customKungfuStore.Skills[i];
+            try
+            {
             var definition = InstallCustomKungfuDefinition(database, record);
             CustomKungfuIconDonors[record.Id] = record.IconDonorId;
             SetRuntimeCustomKungfuIconFile(record.Id, record.CustomIconFile);
             CustomKungfuBaseDonors[record.Id] = record.BaseDonorId;
             registered++;
+            }
+            catch (Exception ex)
+            {
+                LongYinTrainerPlugin.Logger.LogError($"Failed kungfu registration ID={record.Id}, name={record.Name}; continuing other definitions: {ex}");
+                try
+                {
+                    var fallback = new CustomKungfuRecord { Id = record.Id, EditOriginal = record.EditOriginal,
+                        RemovedContent = true, Type = record.Type, BaseDonorId = record.BaseDonorId };
+                    InstallCustomKungfuDefinition(database, fallback);
+                    CustomKungfuIconDonors[record.Id] = record.BaseDonorId;
+                    CustomKungfuBaseDonors[record.Id] = record.BaseDonorId;
+                    LongYinTrainerPlugin.Logger.LogWarning($"Kungfu {record.Id} uses native donor fallback for this session; original configuration retained.");
+                }
+                catch (Exception fallbackError) { LongYinTrainerPlugin.Logger.LogError($"Kungfu {record.Id} fallback failed: {fallbackError.Message}"); }
+            }
         }
         PreloadCustomKungfuIcons();
         _customKungfuRegisteredDatabasePointer = pointer;
@@ -1540,6 +1578,15 @@ public static partial class TrainerBehaviour
 
     private static KungfuSkillData? BuildCustomKungfuDefinition(GameDataController database, CustomKungfuRecord record)
     {
+        if (record.RemovedContent)
+        {
+            var donor = OriginalKungfu(database, record.EditOriginal ? record.Id : record.BaseDonorId);
+            if (donor == null || donor.type != record.Type) throw new InvalidOperationException("删除占位的同类原版母版不存在");
+            var placeholder = donor.Clone()?.TryCast<KungfuSkillData>() ?? throw new InvalidOperationException("无法复制删除占位母版");
+            placeholder.skillID = record.Id;
+            if (!record.EditOriginal) placeholder.name = "[已删除] " + donor.name;
+            return placeholder;
+        }
         NormalizeCustomKungfuRecord(record);
         if (!IsEditableKungfuRecord(record)) return null;
         var baseSkill = OriginalKungfu(database, record.BaseDonorId);
@@ -1807,6 +1854,7 @@ public static partial class TrainerBehaviour
 
     private static void SetRuntimeCustomKungfuIconFile(int skillId, string? iconFile)
     {
+        BattleSkillBarBinding.Clear();
         var normalized = NormalizeCustomKungfuIconFile(iconFile);
         if (string.IsNullOrEmpty(normalized)) CustomKungfuIconFiles.Remove(skillId);
         else CustomKungfuIconFiles[skillId] = normalized;
@@ -2100,285 +2148,6 @@ public static partial class TrainerBehaviour
         {
             LongYinTrainerPlugin.Logger.LogDebug($"Start talent limit label refresh skipped safely: {ex.Message}");
         }
-    }
-
-    public static void RefreshCustomKungfuSkillIcon(SkillIconController? controller)
-    {
-        try
-        {
-            if (controller == null) return;
-            var skill = controller.skillLvData;
-            if (skill == null || !TryGetRuntimeCustomKungfuDefinition(skill.skillID, out var definition) || definition == null)
-            {
-                RemoveCustomKungfuIconOverlay(controller, false);
-                return;
-            }
-
-            var pointer = controller.Pointer;
-            var configuredIcon = CustomKungfuIconFiles.TryGetValue(skill.skillID, out var iconFile)
-                ? NormalizeCustomKungfuIconFile(iconFile)
-                : "";
-            if (CustomKungfuIconOverlays.TryGetValue(pointer, out var cached) &&
-                cached.SkillId == skill.skillID &&
-                string.Equals(cached.IconFile, configuredIcon, StringComparison.OrdinalIgnoreCase) &&
-                RefreshCachedCustomKungfuIcon(cached, definition.name))
-                return;
-
-            RemoveCustomKungfuIconOverlay(controller);
-            RefreshUploadedCustomKungfuIcon(controller, skill.skillID, definition);
-            if (!CustomKungfuIconOverlays.TryGetValue(pointer, out var state))
-            {
-                state = new CustomKungfuIconOverlayState { IconFile = configuredIcon };
-                CustomKungfuIconOverlays[pointer] = state;
-            }
-            state.SkillId = skill.skillID;
-            state.SkillName = definition.name;
-            var texts = controller.GetComponentsInChildren<Text>(true);
-            if (LoggedCustomSkillIconPointers.Add(controller.Pointer))
-            {
-                var hierarchy = new StringBuilder();
-                for (var i = 0; i < texts.Length; i++)
-                    hierarchy.Append(i == 0 ? "" : " | ").Append(texts[i].gameObject.name).Append('=').Append(texts[i].text);
-                LongYinTrainerPlugin.Logger.LogInfo($"Custom battle skill icon bound to {skill.skillID}/{definition.name}; UI text nodes: {hierarchy}");
-            }
-            for (var i = 0; i < texts.Length; i++)
-            {
-                var text = texts[i];
-                var nodeName = text.gameObject.name ?? "";
-                if (nodeName.Contains("name", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(text.text, "吐纳法", StringComparison.Ordinal) ||
-                    string.Equals(text.text, "New Text", StringComparison.Ordinal))
-                {
-                    state.NameTexts.Add(text);
-                    state.OriginalText.Add(text.text);
-                    text.text = definition.name;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            LongYinTrainerPlugin.Logger.LogDebug($"Custom battle skill icon refresh skipped safely: {ex.Message}");
-        }
-    }
-
-    private static bool RefreshCachedCustomKungfuIcon(CustomKungfuIconOverlayState state, string skillName)
-    {
-        try
-        {
-            if (state.ImageSource != null)
-            {
-                if (state.AppliedSprite == null) return false;
-                if (state.ImageSource.sprite == null || state.ImageSource.sprite.Pointer != state.AppliedSprite.Pointer)
-                    state.ImageSource.sprite = state.AppliedSprite;
-                state.ImageSource.preserveAspect = true;
-            }
-            if (state.Overlay != null)
-            {
-                if (state.Source == null) return false;
-                var texture = state.Overlay.GetComponent<UITexture>();
-                if (texture == null || texture.mainTexture == null) return false;
-                var hidden = state.Source.color;
-                if (hidden.a != 0f) { hidden.a = 0f; state.Source.color = hidden; }
-                if (!state.Overlay.activeSelf) state.Overlay.SetActive(true);
-            }
-            for (var i = 0; i < state.NameTexts.Count; i++)
-            {
-                var text = state.NameTexts[i];
-                if (text == null) return false;
-                if (!string.Equals(text.text, skillName, StringComparison.Ordinal)) text.text = skillName;
-            }
-            state.SkillName = skillName;
-            return true;
-        }
-        catch { return false; }
-    }
-
-    private static void RefreshUploadedCustomKungfuIcon(SkillIconController controller, int skillId, KungfuSkillData definition)
-    {
-        if (!TryGetCustomKungfuIconTexture(skillId, out var texture, out var iconFile) || texture == null)
-        {
-            RemoveCustomKungfuIconOverlay(controller);
-            return;
-        }
-
-        var pointer = controller.Pointer;
-        var imageSource = FindCustomKungfuImageSource(controller, definition);
-        var uploadedSprite = GetCustomKungfuIconSprite(iconFile);
-        if (imageSource != null && uploadedSprite != null)
-        {
-            if (CustomKungfuIconOverlays.TryGetValue(pointer, out var imageState))
-            {
-                if (imageState.ImageSource != null && imageState.ImageSource.Pointer == imageSource.Pointer)
-                {
-                    imageSource.sprite = uploadedSprite;
-                    imageSource.preserveAspect = true;
-                    imageState.IconFile = iconFile;
-                    return;
-                }
-                RemoveCustomKungfuIconOverlay(controller);
-            }
-            var unityImageState = new CustomKungfuIconOverlayState
-            {
-                ImageSource = imageSource,
-                SourceSprite = imageSource.sprite,
-                AppliedSprite = uploadedSprite,
-                SourceColor = imageSource.color,
-                IconFile = iconFile
-            };
-            imageSource.sprite = uploadedSprite;
-            imageSource.preserveAspect = true;
-            CustomKungfuIconOverlays[pointer] = unityImageState;
-            LongYinTrainerPlugin.Logger.LogInfo($"Applied uploaded icon {iconFile} to custom kungfu {skillId} through Unity UI Image {imageSource.gameObject.name}.");
-            return;
-        }
-
-        var source = FindCustomKungfuIconSource(controller, definition);
-        if (source == null)
-        {
-            RemoveCustomKungfuIconOverlay(controller);
-            return;
-        }
-
-        if (CustomKungfuIconOverlays.TryGetValue(pointer, out var existing))
-        {
-            if (existing.Overlay != null && existing.Source != null && existing.Source.Pointer == source.Pointer)
-            {
-                var uploaded = existing.Overlay.GetComponent<UITexture>();
-                if (uploaded != null)
-                {
-                    uploaded.mainTexture = texture;
-                    uploaded.width = source.width;
-                    uploaded.height = source.height;
-                    uploaded.depth = source.depth + 1;
-                    existing.IconFile = iconFile;
-                    var hidden = source.color;
-                    hidden.a = 0f;
-                    source.color = hidden;
-                    existing.Overlay.SetActive(true);
-                    return;
-                }
-            }
-            RemoveCustomKungfuIconOverlay(controller);
-        }
-
-        var overlay = new GameObject("CodexCustomKungfuUploadedIcon", Il2CppType.Of<UITexture>());
-        overlay.layer = source.gameObject.layer;
-        overlay.transform.SetParent(source.transform.parent, false);
-        overlay.transform.localPosition = source.transform.localPosition;
-        overlay.transform.localRotation = source.transform.localRotation;
-        overlay.transform.localScale = source.transform.localScale;
-        var uiTexture = overlay.GetComponent<UITexture>();
-        uiTexture.mainTexture = texture;
-        uiTexture.width = source.width;
-        uiTexture.height = source.height;
-        uiTexture.depth = source.depth + 1;
-        uiTexture.pivot = source.pivot;
-        uiTexture.color = Color.white;
-        uiTexture.fixedAspect = true;
-        var state = new CustomKungfuIconOverlayState
-        {
-            Overlay = overlay,
-            Source = source,
-            SourceColor = source.color,
-            IconFile = iconFile
-        };
-        var transparent = source.color;
-        transparent.a = 0f;
-        source.color = transparent;
-        CustomKungfuIconOverlays[pointer] = state;
-        LongYinTrainerPlugin.Logger.LogInfo($"Applied uploaded icon {iconFile} to custom kungfu {skillId}.");
-    }
-
-    private static Image? FindCustomKungfuImageSource(SkillIconController controller, KungfuSkillData definition)
-    {
-        var expected = "";
-        try { expected = definition.GetSkillIcon() ?? ""; }
-        catch { }
-        var images = controller.GetComponentsInChildren<Image>(true);
-        Image? fallback = null;
-        var fallbackScore = 0f;
-        for (var i = 0; i < images.Length; i++)
-        {
-            var image = images[i];
-            if (image == null || image.sprite == null) continue;
-            var spriteName = image.sprite.name ?? "";
-            if (!string.IsNullOrEmpty(expected) && string.Equals(spriteName, expected, StringComparison.Ordinal)) return image;
-            var nodeName = image.gameObject.name ?? "";
-            if (nodeName.Contains("frame", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("background", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Equals("bg", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("rare", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("lock", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("cd", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("level", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("key", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("outline", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("mask", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("fill", StringComparison.OrdinalIgnoreCase)) continue;
-            var rect = image.sprite.rect;
-            var score = rect.width * rect.height + (nodeName.Contains("icon", StringComparison.OrdinalIgnoreCase) ? 10000000f : 0f);
-            if (fallback == null || score > fallbackScore) { fallback = image; fallbackScore = score; }
-        }
-        return fallback;
-    }
-
-    private static UISprite? FindCustomKungfuIconSource(SkillIconController controller, KungfuSkillData definition)
-    {
-        var expected = "";
-        try { expected = definition.GetSkillIcon() ?? ""; }
-        catch { }
-        var sprites = controller.GetComponentsInChildren<UISprite>(true);
-        UISprite? fallback = null;
-        for (var i = 0; i < sprites.Length; i++)
-        {
-            var sprite = sprites[i];
-            if (sprite == null) continue;
-            var spriteName = sprite.spriteName ?? "";
-            if (!string.IsNullOrEmpty(expected) && string.Equals(spriteName, expected, StringComparison.Ordinal)) return sprite;
-            var nodeName = sprite.gameObject.name ?? "";
-            if (nodeName.Contains("frame", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("rare", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("lock", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("cd", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("level", StringComparison.OrdinalIgnoreCase) ||
-                nodeName.Contains("key", StringComparison.OrdinalIgnoreCase)) continue;
-            if (sprite.width < 24 || sprite.height < 24) continue;
-            if (fallback == null || sprite.width * sprite.height > fallback.width * fallback.height) fallback = sprite;
-        }
-        return fallback;
-    }
-
-    private static void RemoveCustomKungfuIconOverlay(SkillIconController controller, bool restoreImageSprite = true)
-    {
-        if (!CustomKungfuIconOverlays.TryGetValue(controller.Pointer, out var state)) return;
-        try
-        {
-            if (state.Source != null) state.Source.color = state.SourceColor;
-            if (restoreImageSprite && state.ImageSource != null && state.SourceSprite != null) state.ImageSource.sprite = state.SourceSprite;
-            if (restoreImageSprite)
-                for (var i = 0; i < state.NameTexts.Count && i < state.OriginalText.Count; i++)
-                    if (state.NameTexts[i] != null) state.NameTexts[i].text = state.OriginalText[i];
-            if (state.Overlay != null) UnityEngine.Object.Destroy(state.Overlay);
-        }
-        catch { }
-        CustomKungfuIconOverlays.Remove(controller.Pointer);
-    }
-
-    private static void RemoveAllCustomKungfuIconOverlays()
-    {
-        foreach (var state in CustomKungfuIconOverlays.Values)
-        {
-            try
-            {
-                if (state.Source != null) state.Source.color = state.SourceColor;
-                if (state.ImageSource != null && state.SourceSprite != null) state.ImageSource.sprite = state.SourceSprite;
-                for (var i = 0; i < state.NameTexts.Count && i < state.OriginalText.Count; i++)
-                    if (state.NameTexts[i] != null) state.NameTexts[i].text = state.OriginalText[i];
-                if (state.Overlay != null) UnityEngine.Object.Destroy(state.Overlay);
-            }
-            catch { }
-        }
-        CustomKungfuIconOverlays.Clear();
     }
 
     public static bool TryResolveCustomKungfuBaseDonor(int skillId, out int donorId)
@@ -3130,7 +2899,7 @@ public static partial class TrainerBehaviour
         _customActivePageKey = "";
     }
 
-    private static CustomKungfuRecord NewCustomKungfuDraft()
+    private static CustomKungfuRecord NewCustomKungfuDraft(int? category = null)
     {
         RegisterCustomKungfuDefinitions();
         var database = GameDataController.Instance;
@@ -3140,12 +2909,15 @@ public static partial class TrainerBehaviour
         {
             foreach (var pair in database.kungfuSkillDataBase)
             {
-                if (pair.Key >= CustomKungfuIdMin || pair.Value == null || pair.Value.hide) continue;
+                if (pair.Key < 0 || pair.Key >= CustomKungfuIdMin || pair.Value == null || pair.Value.hide) continue;
+                var original = OriginalKungfu(database, pair.Key);
+                if (original == null || (category.HasValue && original.type != category.Value)) continue;
                 if (donor != null && pair.Key >= donorId) continue;
-                donor = pair.Value;
+                donor = original;
                 donorId = pair.Key;
             }
         }
+        if (category.HasValue && donor == null) throw new InvalidOperationException("未找到该类别的原版模板");
         var draft = new CustomKungfuRecord
         {
             Name = "自创功法",
@@ -3393,7 +3165,7 @@ public static partial class TrainerBehaviour
         if (draft == null) return;
         switch (field)
         {
-            case "type": draft.Type = Math.Max(0, value); break;
+            case "type": SwitchCustomKungfuCategory(value); return;
             case "rare": draft.RareLv = Math.Max(0, value); break;
             case "force": draft.ForceId = value; break;
             case "target": draft.TargetType = Math.Max(0, value); break;
@@ -3445,13 +3217,13 @@ public static partial class TrainerBehaviour
         AddCustomKungfuButton(parent, "将总母版复制到全部元素", new Vector2(850, 530), new Vector2(370, 42), () =>
         {
             SyncCustomKungfuDraftFromInputs();
-            ApplyFullKungfuDonor(draft.BaseDonorId, true);
+            if (!ApplyFullKungfuDonor(draft.BaseDonorId, true)) return;
             _customStatus = "已把总母版同步到全部可选元素；尚未保存。";
             InvalidateCustomKungfuPages();
             ShowCustomKungfuTab();
         });
         AddCustomKungfuButton(parent, "载入原版功法编辑", new Vector2(10, 590), new Vector2(300, 42), () => OpenCustomKungfuDonorPicker("editOriginal"));
-        AddText(parent, "九类功法均可载入；自创可先同步母版。来源只复制该项，自定义内容优先。最后到保存／管理写入。", new Vector2(330, 586), new Vector2(900, 54), 16);
+        AddText(parent, "先选类别：模板与词条按九类分别提供；切换类别会保留本次各类草稿，保存只写入当前类别。", new Vector2(330, 586), new Vector2(900, 54), 16);
         if (!string.IsNullOrEmpty(_customBasicChoiceField)) BuildCustomKungfuBasicChoicePopup(parent);
     }
 
@@ -3495,7 +3267,7 @@ public static partial class TrainerBehaviour
         AddDonorRowWithSummary(parent, "升级效果", "upgrade", 10, 205, 590);
         AddDonorRowWithSummary(parent, "装备效果", "equip", 650, 205, 590);
         AddDonorRowWithSummary(parent, "使用效果", "use", 10, 318, 590);
-        AddText(parent, "“升级效果”决定升级后加成；“装备效果”是运功/装配加成；“使用效果”是战斗中施放时的 Buff、吸血等实际效果。", new Vector2(10, 438), new Vector2(1220, 48), 16);
+        AddText(parent, "“升级效果”决定升级后加成；“装备效果”是运功/装配加成；“使用效果”提供施放词条，能否触发取决于类别与原生规则。", new Vector2(10, 438), new Vector2(1220, 48), 16);
         AddText(parent, "点击每组右侧“逐条自选”进入编辑器。百分比词条输入 50 会按 50% 保存，其他词条按显示数值保存。", new Vector2(10, 500), new Vector2(1220, 52), 16);
         AddText(parent, "这些数据会按原功法的升级规则计算，不会把突破卡牌的稀有度倍率误写成基础值。", new Vector2(10, 566), new Vector2(1220, 42), 15);
     }
@@ -4071,7 +3843,7 @@ public static partial class TrainerBehaviour
         _customEffectEditorField = field;
         _customEffectCurrentPage = 0;
         _customEffectCatalogPage = 0;
-        _customEffectCatalogGroup = 0;
+        _customEffectCatalogGroup = field is "ratio" or "needs" ? 0 : 5;
         _customEffectSelectedKey = "";
         InvalidateCustomKungfuPages();
         _customTab = 1;
@@ -4083,6 +3855,11 @@ public static partial class TrainerBehaviour
         var draft = _customDraft;
         if (draft == null) return;
         var donor = CustomDonorSkill(GetCustomDonor(field));
+        if (donor == null || donor.type != draft.Type)
+        {
+            _customStatus = "请先选择本类别的来源功法，再导入词条。";
+            return;
+        }
         if (field is "ratio" or "needs")
         {
             var source = field == "ratio" ? donor?.addDamageRatio : donor?.skillNeeds;
@@ -4127,7 +3904,7 @@ public static partial class TrainerBehaviour
     {
         var field = _customEffectEditorField;
         var attriMode = field is "ratio" or "needs";
-        AddText(parent, $"逐条自选 · {CustomDonorFieldLabel(field)}", new Vector2(10, 8), new Vector2(760, 38), 22);
+        AddText(parent, $"{CustomKungfuTypeName(_customDraft!.Type)} · {CustomDonorFieldLabel(field)}逐条编辑", new Vector2(10, 8), new Vector2(760, 38), 22);
         AddCustomKungfuButton(parent, "返回效果总览", new Vector2(1020, 8), new Vector2(210, 38), () =>
         {
             _customEffectEditorField = "";
@@ -4179,14 +3956,34 @@ public static partial class TrainerBehaviour
             ShowCustomKungfuTab();
         });
 
-        var groupLabels = attriMode ? new[] { "全部", "六维", "武学", "生活", "资源" } : new[] { "常用", "六维", "武学", "战斗", "特殊", "全部" };
-        _customEffectCatalogGroup = Math.Clamp(_customEffectCatalogGroup, 0, groupLabels.Length - 1);
-        AddText(parent, "可选词条类型", new Vector2(650, 92), new Vector2(590, 30), 18, TextAnchor.MiddleCenter);
-        var groupWidth = 590f / groupLabels.Length;
-        for (var i = 0; i < groupLabels.Length; i++)
+        var groupLabels = attriMode
+            ? new Dictionary<int, string> { [0] = "全部", [1] = "六维", [2] = "武学", [3] = "生活", [4] = "资源" }
+            : new Dictionary<int, string> { [1] = "六维", [2] = "武学", [3] = "战斗", [4] = "特殊", [5] = "全部", [6] = "自身状态", [7] = "对方状态", [8] = "攻触发", [9] = "守触发" };
+        var allGroup = attriMode ? 0 : 5;
+        var allowedKeys = GetCategoryEffectKeys(field);
+        var catalogs = new Dictionary<int, List<CustomEffectChoice>>();
+        var visibleGroups = new List<int> { allGroup };
+        catalogs[allGroup] = GetCustomEffectCatalog(field, allGroup, allowedKeys);
+        foreach (var group in groupLabels.Keys)
         {
-            var captured = i;
-            AddCustomKungfuButton(parent, (i == _customEffectCatalogGroup ? "● " : "") + groupLabels[i], new Vector2(650 + i * groupWidth, 124), new Vector2(groupWidth - 5, 32), () =>
+            if (group == allGroup) continue;
+            var entries = GetCustomEffectCatalog(field, group, allowedKeys);
+            if (entries.Count == 0) continue;
+            catalogs[group] = entries;
+            visibleGroups.Add(group);
+        }
+        if (!visibleGroups.Contains(_customEffectCatalogGroup))
+        {
+            _customEffectCatalogGroup = allGroup;
+            _customEffectCatalogPage = 0;
+        }
+        AddText(parent, $"本类原版{CustomDonorFieldLabel(field)}词条", new Vector2(650, 92), new Vector2(590, 30), 18, TextAnchor.MiddleCenter);
+        var groupColumns = Math.Min(5, visibleGroups.Count);
+        var groupWidth = 590f / groupColumns;
+        for (var i = 0; i < visibleGroups.Count; i++)
+        {
+            var captured = visibleGroups[i];
+            AddCustomKungfuButton(parent, (captured == _customEffectCatalogGroup ? "● " : "") + groupLabels[captured], new Vector2(650 + (i % groupColumns) * groupWidth, 124 + (i / groupColumns) * 36), new Vector2(groupWidth - 5, 32), () =>
             {
                 _customEffectCatalogGroup = captured;
                 _customEffectCatalogPage = 0;
@@ -4194,8 +3991,11 @@ public static partial class TrainerBehaviour
                 ShowCustomKungfuTab();
             });
         }
-        var catalog = GetCustomEffectCatalog(field, _customEffectCatalogGroup);
-        const int catalogPageSize = 7;
+        var catalog = catalogs[_customEffectCatalogGroup];
+        var catalogTop = visibleGroups.Count > groupColumns ? 202 : 166;
+        var catalogPageSize = catalogTop == 166 ? 7 : 6;
+        if (catalog.Count == 0)
+            AddText(parent, "本类别的这组效果没有原版可选词条。\n左侧已有词条仍可选择修改或删除。", new Vector2(650, catalogTop), new Vector2(590, 80), 16);
         var catalogPageCount = Math.Max(1, (catalog.Count + catalogPageSize - 1) / catalogPageSize);
         _customEffectCatalogPage = Math.Clamp(_customEffectCatalogPage, 0, catalogPageCount - 1);
         var catalogStart = _customEffectCatalogPage * catalogPageSize;
@@ -4203,7 +4003,7 @@ public static partial class TrainerBehaviour
         {
             var choice = catalog[catalogStart + i];
             var capturedKey = choice.Key;
-            AddCustomKungfuButton(parent, (_customEffectSelectedKey == capturedKey ? "● " : "") + choice.Label, new Vector2(650, 166 + i * 45), new Vector2(590, 37), () =>
+            AddCustomKungfuButton(parent, (_customEffectSelectedKey == capturedKey ? "● " : "") + choice.Label, new Vector2(650, catalogTop + i * 45), new Vector2(590, 37), () =>
             {
                 _customEffectSelectedKey = capturedKey;
                 InvalidateCustomKungfuPages();
@@ -4227,7 +4027,9 @@ public static partial class TrainerBehaviour
             InvalidateCustomKungfuPages();
             ShowCustomKungfuTab();
         });
-        AddText(parent, attriMode ? "威力/需求表使用底层原始数值；可以用来源导入观察原版量级后再调整。" : "百分比转换只发生在界面边界，配置文件与游戏底层仍保存小数。", new Vector2(650, 618), new Vector2(590, 42), 14);
+        AddText(parent, attriMode ? "威力/需求表使用底层原始数值；可以用来源导入观察原版量级后再调整。" : CustomEffectRuleDescription(selected), new Vector2(650, 618), new Vector2(590, 76), 14);
+        if (!attriMode)
+            AddText(parent, CustomEffectPlacementDescription(field, selected), new Vector2(10, 578), new Vector2(570, 116), 14);
     }
 
     private static List<CustomEffectChoice> GetCustomEffectCurrentChoices(string field)
@@ -4264,9 +4066,10 @@ public static partial class TrainerBehaviour
         return result;
     }
 
-    private static List<CustomEffectChoice> GetCustomEffectCatalog(string field, int group)
+    private static List<CustomEffectChoice> GetCustomEffectCatalog(string field, int group, HashSet<string>? allowedKeys = null)
     {
         var result = new List<CustomEffectChoice>();
+        var allowed = allowedKeys ?? GetCategoryEffectKeys(field);
         if (field is "ratio" or "needs")
         {
             void AddKind(string kind, string[] labels)
@@ -4285,6 +4088,7 @@ public static partial class TrainerBehaviour
                 result.Add(new CustomEffectChoice { Key = "power:0", Kind = "power", Label = "体力" });
                 result.Add(new CustomEffectChoice { Key = "charm:0", Kind = "charm", Label = "魅力" });
             }
+            result.RemoveAll(choice => !allowed.Contains(choice.Key));
             return result;
         }
 
@@ -4297,7 +4101,7 @@ public static partial class TrainerBehaviour
         foreach (var raw in Enum.GetValues(typeof(HeroSpeAddDataType)))
         {
             var id = Convert.ToInt32(raw, CultureInfo.InvariantCulture);
-            if (!seen.Add(id)) continue;
+            if (!seen.Add(id) || !allowed.Contains("spe:" + id.ToString(CultureInfo.InvariantCulture))) continue;
             var name = Enum.GetName(typeof(HeroSpeAddDataType), id);
             if (string.IsNullOrWhiteSpace(name)) continue;
             var include = group switch
@@ -4307,6 +4111,7 @@ public static partial class TrainerBehaviour
                 2 => name.Contains("fightSkill", StringComparison.OrdinalIgnoreCase) || name.Contains("livingSkill", StringComparison.OrdinalIgnoreCase),
                 3 => IsCustomBattleEffectName(name),
                 4 => !common.Contains(name) && !name.Contains("Attri", StringComparison.Ordinal) && !name.Contains("Skill", StringComparison.Ordinal),
+                >= 6 => MatchesCustomEffectRule(id, group),
                 _ => true
             };
             if (!include) continue;
@@ -4351,7 +4156,8 @@ public static partial class TrainerBehaviour
         var allGroup = field is "ratio" or "needs" ? 0 : 5;
         var catalog = GetCustomEffectCatalog(field, allGroup);
         for (var i = 0; i < catalog.Count; i++) if (catalog[i].Key == key) return catalog[i];
-        return null;
+        // Existing entries remain editable/removable; changing the catalog must not erase saved data.
+        return GetCustomEffectCurrentChoices(field).Find(choice => choice.Key == key);
     }
 
     private static float GetCustomEffectDisplayValue(string field, CustomEffectChoice choice)
@@ -4488,10 +4294,12 @@ public static partial class TrainerBehaviour
     private static void BuildCustomKungfuDonorPicker(Transform parent)
     {
         var choices = GetOriginalKungfuChoices(_customPickerSearch);
+        choices.RemoveAll(choice => choice.Type != _customDraft!.Type);
+        if (!choices.Exists(choice => choice.Id == _customPickerPreviewSkillId)) _customPickerPreviewSkillId = int.MinValue;
         const int pageSize = 8;
         var pageCount = Math.Max(1, (choices.Count + pageSize - 1) / pageSize);
         _customPickerPage = Math.Clamp(_customPickerPage, 0, pageCount - 1);
-        AddText(parent, $"选择{CustomDonorFieldLabel(_customPickerField)}的来源功法", new Vector2(10, 8), new Vector2(650, 40), 22);
+        AddText(parent, $"{CustomKungfuTypeName(_customDraft!.Type)} · 选择{CustomDonorFieldLabel(_customPickerField)}来源", new Vector2(10, 8), new Vector2(650, 40), 22);
         AddText(parent, "单击左侧功法先预览，确认后才会采用。", new Vector2(700, 8), new Vector2(540, 40), 16, TextAnchor.MiddleCenter);
         _customPickerSearchInput = AddInput(parent, _customPickerSearch, new Vector2(10, 58), new Vector2(455, 38));
         AddCustomKungfuButton(parent, "搜索", new Vector2(475, 58), new Vector2(100, 38), () =>
@@ -4569,7 +4377,7 @@ public static partial class TrainerBehaviour
     private static void ConfirmCustomKungfuDonorPreview()
     {
         var database = GameDataController.Instance;
-        if (database == null || OriginalKungfu(database, _customPickerPreviewSkillId) == null)
+        if (database == null || OriginalKungfu(database, _customPickerPreviewSkillId) is not { } selectedDonor || selectedDonor.type != _customDraft?.Type)
         {
             _customStatus = "请先从左侧选择一个可用的来源功法。";
             return;
@@ -4773,8 +4581,9 @@ public static partial class TrainerBehaviour
         if (database?.kungfuSkillDataBase == null) return result;
         foreach (var pair in database.kungfuSkillDataBase)
         {
-            var skill = pair.Value;
-            if (pair.Key < 0 || pair.Key >= CustomKungfuIdMin || skill == null) continue;
+            if (pair.Key < 0 || pair.Key >= CustomKungfuIdMin) continue;
+            var skill = OriginalKungfu(database, pair.Key);
+            if (skill == null) continue;
             var name = skill.name ?? $"功法 {pair.Key}";
             if (!string.IsNullOrWhiteSpace(search) && name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0 && !pair.Key.ToString(CultureInfo.InvariantCulture).Contains(search, StringComparison.OrdinalIgnoreCase)) continue;
             result.Add(new SkillChoiceSnapshot { Id = pair.Key, Name = name, Type = skill.type, RareLv = skill.rareLv });
@@ -4828,9 +4637,14 @@ public static partial class TrainerBehaviour
         }
     }
 
-    private static void ApplyFullKungfuDonor(int donorId, bool copyScalars)
+    private static bool ApplyFullKungfuDonor(int donorId, bool copyScalars)
     {
         var draft = _customDraft!;
+        if (CustomDonorSkill(donorId)?.type != draft.Type)
+        {
+            _customStatus = "总母版类别不匹配，请先选择本类别模板。";
+            return false;
+        }
         draft.DamageRatioDonorId = donorId;
         draft.NeedsDonorId = donorId;
         draft.UpgradeDonorId = donorId;
@@ -4851,10 +4665,10 @@ public static partial class TrainerBehaviour
         draft.UseCustomUpgrade = false;
         draft.UseCustomEquip = false;
         draft.UseCustomUse = false;
-        if (!copyScalars) return;
+        if (!copyScalars) return true;
         var database = GameDataController.Instance;
         var donor = database == null ? null : OriginalKungfu(database, donorId);
-        if (donor == null) return;
+        if (donor == null) return false;
         draft.Type = donor.type;
         draft.RareLv = donor.rareLv;
         draft.ForceId = donor.belongForceID;
@@ -4872,6 +4686,7 @@ public static partial class TrainerBehaviour
         draft.UseCustomAttackPosture = false;
         draft.UseCustomDefensePosture = false;
         SeedCustomRangeAndPosture(draft, donor);
+        return true;
     }
 
     private static void SyncCustomKungfuDraftFromInputs()
@@ -4922,17 +4737,20 @@ public static partial class TrainerBehaviour
         AddText(parent, "已保存的功法（原版修改／自创）", new Vector2(10, 102), new Vector2(560, 36), 19, TextAnchor.MiddleCenter);
 
         const int pageSize = 6;
-        var pageCount = Math.Max(1, (_customKungfuStore.Skills.Count + pageSize - 1) / pageSize);
+        var visibleSkills = _customKungfuStore.Skills.FindAll(record => !record.RemovedContent);
+        var pageCount = Math.Max(1, (visibleSkills.Count + pageSize - 1) / pageSize);
+        if (visibleSkills.Count == 0)
+            AddText(parent, "暂无已保存功法", new Vector2(10, 160), new Vector2(560, 48), 18, TextAnchor.MiddleCenter);
         _customManagePage = Math.Clamp(_customManagePage, 0, pageCount - 1);
         var start = _customManagePage * pageSize;
-        for (var i = 0; i < pageSize && start + i < _customKungfuStore.Skills.Count; i++)
+        for (var i = 0; i < pageSize && start + i < visibleSkills.Count; i++)
         {
-            var saved = _customKungfuStore.Skills[start + i];
+            var saved = visibleSkills[start + i];
             var captured = saved.Id;
             AddCustomKungfuButton(parent, $"{(saved.EditOriginal ? "[原版] " : "[自创] ")}{saved.Name}　[ID {saved.Id}]", new Vector2(10, 150 + i * 62), new Vector2(560, 48), () =>
             {
                 var record = FindSavedCustomKungfu(captured);
-                if (record == null) return;
+                if (record == null || record.RemovedContent) return;
                 _customDraft = CloneCustomKungfuRecord(record);
                 _customStatus = $"已载入 {record.Name}；修改后需再次保存。";
                 _customTab = 0;
@@ -4967,6 +4785,8 @@ public static partial class TrainerBehaviour
             ShowCustomKungfuTab();
         });
         AddCustomKungfuButton(parent, "编辑原版功法（全部九类）", new Vector2(650, 450), new Vector2(570, 44), () => OpenCustomKungfuDonorPicker("editOriginal"));
+        if (FindSavedCustomKungfu(draft.Id) is { RemovedContent: false })
+            AddCustomKungfuButton(parent, "删除当前功法", new Vector2(10, 590), new Vector2(570, 42), RemoveSavedKungfuContent);
         AddText(parent, "原版修改沿用原 ID，影响所有使用该功法的角色；保存后刷新装备与战斗效果。内功、轻功、绝技请装入各自槽位。升级效果按游戏规则在后续升级时获得。", new Vector2(650, 502), new Vector2(570, 76), 15);
         AddText(parent, "配置每次保存自动备份 .bak；自创功法停用模组前需移除技能与秘籍。", new Vector2(650, 586), new Vector2(570, 40), 14);
     }
@@ -4992,6 +4812,7 @@ public static partial class TrainerBehaviour
         {
             var database = GameDataController.Instance ?? throw new InvalidOperationException("功法数据库尚未载入");
             var record = CloneCustomKungfuRecord(_customDraft);
+            if (record.RemovedContent) throw new InvalidOperationException("这是删除后的兼容记录，不可直接保存编辑；请新建功法或恢复删除前配置备份。");
             record.Name = record.Name.Trim();
             if (string.IsNullOrWhiteSpace(record.Name)) throw new InvalidOperationException("功法名称不能为空");
             if (!record.EditOriginal && record.Id == 0) record.Id = AllocateCustomKungfuId(database);
@@ -5104,9 +4925,10 @@ public static partial class TrainerBehaviour
         for (var i = 0; i < restored.Skills.Count; i++)
         {
             var record = restored.Skills[i];
-            ValidateCustomKungfuDonors(database, record);
-            if (BuildCustomKungfuDefinition(database, record) == null)
-                throw new InvalidOperationException($"功法 {record.Name}（ID {record.Id}）无法从保存数据重建");
+            if (!record.RemovedContent) ValidateCustomKungfuDonors(database, record);
+            var rebuilt = BuildCustomKungfuDefinition(database, record)
+                ?? throw new InvalidOperationException($"功法 {record.Name}（ID {record.Id}）无法从保存数据重建");
+            ValidateUtilityNativeDefinition(database, record, rebuilt);
         }
         File.WriteAllText(temp, json, new UTF8Encoding(false));
         if (File.Exists(_customKungfuStorePath)) File.Copy(_customKungfuStorePath, backup, true);
@@ -5792,6 +5614,9 @@ public static partial class TrainerBehaviour
             {
                 ClearSelectedItem();
                 _catalogSelected = entry;
+                if (entry.Kind == CatalogKind.Book) _catalogRarity = entry.RareLv.ToString(CultureInfo.InvariantCulture);
+                if (entry.Kind == CatalogKind.Material || entry.Kind == CatalogKind.Treasure)
+                    _catalogLevel = entry.BaseLevel.ToString(CultureInfo.InvariantCulture);
                 RequestPageRebuild();
             });
         }
@@ -5799,11 +5624,12 @@ public static partial class TrainerBehaviour
         AddText(p, $"第 {_catalogPage + 1} / {pageCount} 页　共 {filtered.Count} 项", new Vector2(270, 452), new Vector2(250, 34), 16, TextAnchor.MiddleCenter);
         AddButton(p, "下一页", new Vector2(530, 452), new Vector2(120, 34), () => { if (_catalogPage + 1 < pageCount) _catalogPage++; RequestPageRebuild(); });
 
+        BuildBookCatalogFilters(p, RequestPageRebuild)();
         var bagItem = ResolveSelectedItem();
         if (bagItem != null)
         {
             BuildSelectedItemEditor(p, bagItem);
-            AddText(p, "提示：右侧正在编辑游戏背包中点击的现有物品。点击左侧任意图鉴卡片可切回物品生成。", new Vector2(0, 520), new Vector2(690, 56), 15);
+            if (categories[_catalogCategory] != "秘籍") AddText(p, "提示：右侧正在编辑游戏背包中点击的现有物品。点击左侧任意图鉴卡片可切回物品生成。", new Vector2(0, 520), new Vector2(690, 56), 15);
             return;
         }
 
@@ -5847,7 +5673,7 @@ public static partial class TrainerBehaviour
         });
         AddText(p, "稀有度说明\n" + BuildRarityGuide(), new Vector2(730, 438), new Vector2(330, 160), 15);
 
-        AddText(p, "提示：这里展示的是生成图鉴，不会当作背包现有物品。编辑已有物品时，请在游戏背包中点击该物品，再进入“物品修改”。", new Vector2(0, 520), new Vector2(690, 56), 15);
+        if (categories[_catalogCategory] != "秘籍") AddText(p, "提示：这里展示的是生成图鉴，不会当作背包现有物品。编辑已有物品时，请在游戏背包中点击该物品，再进入“物品修改”。", new Vector2(0, 520), new Vector2(690, 56), 15);
     }
 
     private static void BuildSelectedItemEditor(Transform parent, ItemData item)
@@ -5982,8 +5808,7 @@ public static partial class TrainerBehaviour
         var rarity = Math.Clamp(rarityRaw, 0, rarityMax);
         if (_catalogLevelInput != null)
         {
-            var isEquipment = _catalogSelected?.IsEquipment == true;
-            var levelMax = isEquipment ? Math.Max(0, (GlobalData.EquipLvName?.Count ?? 1) - 1) : 999;
+            var levelMax = _catalogSelected != null ? CatalogLevelMax(_catalogSelected) : 999;
             var levelRaw = ParseIntSafe(_catalogLevelInput.text);
             var level = Math.Clamp(levelRaw, 0, levelMax);
             var limited = level != levelRaw || rarity != rarityRaw ? "（已按游戏范围修正）" : "";
@@ -6041,10 +5866,21 @@ public static partial class TrainerBehaviour
         {
             var entry = Catalog[i];
             if (category != "全部" && entry.Category != category) continue;
-            if (!string.IsNullOrWhiteSpace(search) && entry.Name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            if (category == "秘籍" && !BookCatalogRules.Matches(entry.SkillType, entry.RareLv, _bookTypeFilter, _bookRarityFilter)) continue;
+            if (!string.IsNullOrWhiteSpace(search) && entry.Name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0
+                && entry.Detail.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0
+                && !(entry.Kind == CatalogKind.Book && entry.SkillId.ToString(CultureInfo.InvariantCulture) == search.Trim())) continue;
             result.Add(entry);
         }
-        result.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCulture));
+        result.Sort((a, b) => {
+            if ((a.Kind == CatalogKind.Book) != (b.Kind == CatalogKind.Book))
+                return a.Kind == CatalogKind.Book ? -1 : 1;
+            if (a.Kind == CatalogKind.Book && b.Kind == CatalogKind.Book) {
+                var order = BookCatalogRules.Compare(a.SkillType, a.RareLv, b.SkillType, b.RareLv);
+                if (order != 0) return order;
+            }
+            return string.Compare(a.Name, b.Name, StringComparison.CurrentCulture);
+        });
         return result;
     }
 
@@ -6079,19 +5915,21 @@ public static partial class TrainerBehaviour
             {
                 if (++batch % 32 == 0) yield return null;
                 var skill = pair.Value;
-                if (skill == null || skill.hide) continue;
+                if (skill == null || !BookCatalogRules.IsEligible(skill.skillID, skill.type, skill.name)) continue;
+                if (FindSavedCustomKungfu(skill.skillID) is { RemovedContent: true, EditOriginal: false }) continue;
                 var skillId = skill.skillID;
                 var skillName = skill.Name(false);
-                var bookPreview = new ItemData(ItemType.Book).SetBookData(skillId, 0);
+                var bookPreview = new ItemData(ItemType.Book).SetBookData(skillId, skill.rareLv);
                 Catalog.Add(new CatalogEntry
                 {
                     Category = "秘籍",
                     Name = skillName + "秘籍",
-                    Detail = $"秘籍｜技能 ID {skillId}\n稀有度可在添加前设置。",
-                    IconName = bookPreview?.GetItemIconName() ?? "",
-                    RareLv = 0,
+                    Detail = $"{CustomKungfuTypeName(skill.type)}｜{RarityName(skill.rareLv)}｜ID {skillId}\n{(skill.hide ? "原版隐藏功法；" : "")}秘籍品级可在添加前调整。",
+                    IconName = SafeCatalogIcon(bookPreview),
+                    RareLv = skill.rareLv,
                     BaseLevel = 0,
                     SkillId = skillId,
+                    SkillType = skill.type,
                     ItemTypeValue = (int)ItemType.Book,
                     Kind = CatalogKind.Book
                 });
@@ -6117,7 +5955,7 @@ public static partial class TrainerBehaviour
             var itemLevel = template.itemLv;
             var itemRarity = template.rareLv;
             var itemValue = template.value;
-            var iconName = template.GetItemIconName();
+            var iconName = SafeCatalogIcon(template);
             var isEquipment = template.equipmentData != null;
             Catalog.Add(new CatalogEntry
             {
@@ -6144,23 +5982,42 @@ public static partial class TrainerBehaviour
             var subType = i;
             var typeName = names[i];
             if (string.IsNullOrWhiteSpace(typeName)) typeName = $"{category} {i + 1}";
-            var preview = kind == CatalogKind.Material
-                ? new ItemData(ItemType.Material).SetMaterialData(subType, 1, 0)
-                : new ItemData(ItemType.Treasure).SetTreasureData(subType, 1, 0);
-            Catalog.Add(new CatalogEntry
+            var levelCount = kind == CatalogKind.Material ? GlobalData.EquipLvName?.Count ?? 0 : 6;
+            for (var level = 0; level < levelCount; level++)
             {
-                Category = category,
-                Name = typeName,
-                Detail = $"{category}类型：{typeName}\n等级与稀有度可在添加前设置。",
-                IconName = preview?.GetItemIconName() ?? "",
-                RareLv = 0,
-                BaseLevel = 1,
-                ItemTypeValue = (int)type,
-                ItemSubType = subType,
-                Kind = kind
-            });
+                var preview = kind == CatalogKind.Material
+                    ? new ItemData(ItemType.Material).SetMaterialData(subType, level, 0)
+                    : new ItemData(ItemType.Treasure).SetTreasureData(subType, level, 0);
+                Catalog.Add(new CatalogEntry
+                {
+                    Category = category,
+                    // Use the native template name, not an unidentified treasure's display name.
+                    Name = string.IsNullOrWhiteSpace(preview.name) ? SafeItemName(preview) : preview.name,
+                    Detail = $"{category}类型：{typeName}｜等级 {level}\n已展开原版各等级名称；等级与稀有度可调整。",
+                    IconName = SafeCatalogIcon(preview),
+                    RareLv = 0,
+                    BaseLevel = level,
+                    ItemTypeValue = (int)type,
+                    ItemSubType = subType,
+                    Kind = kind
+                });
+            }
         }
     }
+
+    private static string SafeCatalogIcon(ItemData? item)
+    {
+        try { return item?.GetItemIconName() ?? ""; }
+        catch (Exception ex)
+        {
+            LongYinTrainerPlugin.Logger.LogWarning($"Catalog icon unavailable for item {item?.itemID}: {ex.Message}");
+            return "";
+        }
+    }
+
+    private static int CatalogLevelMax(CatalogEntry entry) =>
+        entry.Kind == CatalogKind.Treasure ? 5 :
+        entry.IsEquipment || entry.Kind == CatalogKind.Material ? Math.Max(0, (GlobalData.EquipLvName?.Count ?? 1) - 1) : 999;
 
     private static string SafeItemName(ItemData item)
     {
@@ -6211,7 +6068,7 @@ public static partial class TrainerBehaviour
         try
         {
             var quantity = Math.Clamp(ParseInt(quantityText), 1, entry.IsEquipment ? 100 : 999);
-            var equipmentLevelMax = entry.IsEquipment ? Math.Max(0, (GlobalData.EquipLvName?.Count ?? 1) - 1) : 999;
+            var equipmentLevelMax = CatalogLevelMax(entry);
             var level = Math.Clamp(ParseInt(levelText), 0, equipmentLevelMax);
             var rarityMax = Math.Max(0, (GameDataController.Instance?.rareLvData?.Count ?? 6) - 1);
             var rarity = Math.Clamp(ParseInt(rarityText), 0, rarityMax);
@@ -7001,8 +6858,16 @@ public static partial class TrainerBehaviour
             () => LongYinTrainerPlugin.LockExploreStamina.Value,
             value => LongYinTrainerPlugin.LockExploreStamina.Value = value);
         AddNativeToggle(p, "冻结日期推进", 540, 45,
-            () => LongYinTrainerPlugin.FreezeDate.Value,
-            value => LongYinTrainerPlugin.FreezeDate.Value = value);
+            () => DateFreezeControl.Enabled,
+            value =>
+            {
+                try
+                {
+                    DateFreezeControl.SetEnabled(value);
+                    _status = value ? "日期冻结已开启。" : "日期冻结已关闭，换日拦截已移除。";
+                }
+                catch (Exception ex) { _status = "日期开关处理失败（已停止拦截）：" + ex.Message; }
+            });
         AddNativeToggle(p, "新建角色无限分配点", 0, 89,
             () => UnlimitedCreationPoints,
             value => UnlimitedCreationPoints = value);

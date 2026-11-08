@@ -126,13 +126,13 @@ public static partial class TrainerBehaviour
         if (saved?.EditOriginal == true) _customDraft = CloneCustomKungfuRecord(saved);
         else
         {
-            _customDraft = NewCustomKungfuDraft();
+            _customDraft = NewCustomKungfuDraft(source.type);
             _customDraft.EditOriginal = true;
             _customDraft.Id = skillId;
             _customDraft.BaseDonorId = skillId;
             _customDraft.Name = source.name;
             _customDraft.Description = source.describe;
-            ApplyFullKungfuDonor(skillId, true);
+            if (!ApplyFullKungfuDonor(skillId, true)) throw new InvalidOperationException("原版功法模板类别不匹配，未载入");
         }
         _customTab = 0;
         _customEffectEditorField = "";

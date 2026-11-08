@@ -38,3 +38,9 @@ dist/
 !EventRegression/
 !EventRegression/*.cs
 !EventRegression/*.csproj
+!SkillBindingRegression/
+!SkillBindingRegression/*.cs
+!SkillBindingRegression/*.csproj
+!BookCatalogRegression/
+!BookCatalogRegression/*.cs
+!BookCatalogRegression/*.csproj

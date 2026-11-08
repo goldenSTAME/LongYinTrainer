@@ -116,6 +116,14 @@ static class Program
             (900000,false,true), (999999,false,true), (-1,true,false), (0,false,false), (1000000,false,false) })
             Check((bool)Call("IsEditableKungfuRecord", TrainerBehaviour.Record(id, originalMode))! == expected,
                 $"ID/mode validation: {id}/{originalMode}");
+        TrainerBehaviour.TestReset();
+        for (var type = 0; type < 9; type++)
+        {
+            var id = 100 + type;
+            GameDataController.Instance!.kungfuSkillDataBase[id] = new KungfuSkillData { skillID = id, type = type, name = "native" };
+            Call("LoadOriginalKungfuDraft", id);
+            Check(TrainerBehaviour.DraftCategoryMatches(id, type), $"original editor type {type}: correct category before donor guard, original ID retained");
+        }
         Console.WriteLine($"{checks} checks passed.");
     }
 }
@@ -206,6 +214,7 @@ public static partial class TrainerBehaviour
         public bool EditOriginal;
         public string Name = "", Description = "";
     }
+    public static bool DraftCategoryMatches(int id, int type) => _customDraft?.Type == type && _customDraft.Id == id && _customDraft.BaseDonorId == id && _customDraft.EditOriginal;
     public static void TestReset()
     {
         ResetOriginalKungfuSources();
@@ -223,6 +232,6 @@ public static partial class TrainerBehaviour
     private static CustomKungfuRecord? FindSavedCustomKungfu(int id) => _customKungfuStore.Skills.Find(record => record.Id == id);
     private static CustomKungfuRecord CloneCustomKungfuRecord(CustomKungfuRecord record) => new()
         { Id = record.Id, EditOriginal = record.EditOriginal, Type = record.Type, Name = record.Name, Description = record.Description };
-    private static CustomKungfuRecord NewCustomKungfuDraft() => new();
-    private static void ApplyFullKungfuDonor(int id, bool scalars) { }
+    private static CustomKungfuRecord NewCustomKungfuDraft(int? category = null) => new() { Type = category ?? 0 };
+    private static bool ApplyFullKungfuDonor(int id, bool scalars) => _customDraft?.Type == OriginalKungfu(GameDataController.Instance!, id)?.type;
 }

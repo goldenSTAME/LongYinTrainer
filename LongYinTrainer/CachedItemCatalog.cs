@@ -23,6 +23,8 @@ public static partial class TrainerBehaviour
         var pageCount = 1;
         Text pageLabel=null!, title=null!, detail=null!, levelLabel=null!, rareLabel=null!, preview=null!;
         InputField quantity=null!, level=null!, rarity=null!;
+        Text help=null!;
+        Action updateBookFilters = () => {};
 
         AddText(p, "物品图鉴", Vector2.zero, new Vector2(160,34),22);
         var search = AddInput(p,_catalogSearch,new Vector2(160,0),new Vector2(245,34));
@@ -42,7 +44,11 @@ public static partial class TrainerBehaviour
             var n=i;
             cards[i]=AddButton(p,"",new Vector2(140+i%4*142,48+i/4*132),new Vector2(132,122),()=> {
                 if(entries[n]==null || ReferenceEquals(_catalogSelected,entries[n])) return;
-                SaveInputs(); ClearSelectedItem(); _catalogSelected=entries[n]; UpdateSelection(); UpdateDetails();
+                SaveInputs(); ClearSelectedItem(); _catalogSelected=entries[n];
+                if (_catalogSelected!.Kind == CatalogKind.Book) { _catalogRarity=_catalogSelected.RareLv.ToString(); rarity.text=_catalogRarity; }
+                if (_catalogSelected.Kind == CatalogKind.Material || _catalogSelected.Kind == CatalogKind.Treasure)
+                { _catalogLevel=_catalogSelected.BaseLevel.ToString(); level.text=_catalogLevel; }
+                UpdateSelection(); UpdateDetails();
             });
             frames[i]=cards[i].GetComponent<Image>();
             var paper=UiObject("CardPaper",cards[i].transform,new Vector2(124,114),new Vector2(4,4));
@@ -68,7 +74,8 @@ public static partial class TrainerBehaviour
         preview=AddText(p,"",new Vector2(730,316),new Vector2(330,52),14);
         AddButton(p,"添加到主角背包",new Vector2(730,380),new Vector2(300,44),()=> { SaveInputs(); AddCatalogItem(_catalogSelected,_catalogQuantity,_catalogLevel,_catalogRarity); });
         AddText(p,"稀有度说明\n"+BuildRarityGuide(),new Vector2(730,438),new Vector2(330,160),15);
-        AddText(p,"测试版：仅使用游戏资源，旧图片回退已禁用。资源加载后可点击“刷新数据”。\n分类、翻页和选择物品均复用现有控件。",new Vector2(0,520),new Vector2(690,56),15);
+        help = AddText(p,"目录包含隐藏功法。搜索名称或功法 ID；秘籍可按种类、品级筛选。\n分类、翻页和选择物品均复用现有控件。",new Vector2(0,520),new Vector2(690,56),15);
+        updateBookFilters = BuildBookCatalogFilters(p, UpdateGrid);
         UpdateGrid(); UpdateDetails();
         LongYinTrainerPlugin.Logger.LogInfo("Catalog UI pool built: 12 reusable cards; runtime icons only.");
 
@@ -78,6 +85,8 @@ public static partial class TrainerBehaviour
                 ReferenceEquals(entries[i],_catalogSelected) ? new Color(.72f,.12f,.08f,1f) : RarityColor(entries[i]!.RareLv));
         }
         void UpdateGrid() {
+            updateBookFilters();
+            help.gameObject.SetActive(categories[Math.Clamp(_catalogCategory,0,categories.Count-1)] != "秘籍");
             filtered=FilterCatalog(categories[Math.Clamp(_catalogCategory,0,categories.Count-1)],_catalogSearch);
             pageCount=Math.Max(1,(filtered.Count+11)/12); _catalogPage=Math.Clamp(_catalogPage,0,pageCount-1);
             for(var i=0;i<categories.Count;i++) {
