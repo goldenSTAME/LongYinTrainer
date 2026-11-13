@@ -36,7 +36,9 @@ internal static class BuildingCombat
                 pre == null ? null : new HarmonyMethod(typeof(BuildingCombat), pre),
                 post == null ? null : new HarmonyMethod(typeof(BuildingCombat), post));
         }
-        Patch(typeof(BattleController), "PrepareBattleMap", new[] { typeof(BattleType), typeof(TeamLists), typeof(TeamLists), typeof(float), typeof(string), typeof(bool), typeof(BattleMapTypeData), typeof(int), typeof(float) }, nameof(Prepare));
+        // The November game update adds _forceSupportAndPlotEnter. Leave its
+        // value untouched; the prefix only adjusts participants and the cap.
+        Patch(typeof(BattleController), "PrepareBattleMap", new[] { typeof(BattleType), typeof(TeamLists), typeof(TeamLists), typeof(float), typeof(string), typeof(bool), typeof(BattleMapTypeData), typeof(int), typeof(float), typeof(bool) }, nameof(Prepare));
         Patch(typeof(BattleController), "BattleTeamPrepare", Type.EmptyTypes, post: nameof(Prepared));
         Patch(typeof(BattleController), "HeroEnterBattleField", new[] { typeof(HeroData), typeof(BattleTeam), typeof(GridUnitData), typeof(int), typeof(float) }, post: nameof(Joined));
         Patch(typeof(BattleController), "BattleRealEnd", Type.EmptyTypes, nameof(Ending));

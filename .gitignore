@@ -44,3 +44,10 @@ dist/
 !BookCatalogRegression/
 !BookCatalogRegression/*.cs
 !BookCatalogRegression/*.csproj
+
+!CategoryRegression/
+!CategoryRegression/*.cs
+!CategoryRegression/*.csproj
+!DateRegression/
+!DateRegression/*.cs
+!DateRegression/*.csproj

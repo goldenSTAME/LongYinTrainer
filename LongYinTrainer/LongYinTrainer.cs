@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.30.19")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.30.20")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -134,7 +134,7 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         Patch(typeof(GameDataController), nameof(GameDataController.Update), Type.EmptyTypes, null, nameof(GameUpdatePostfix));
         Patch(typeof(UIQuitController), nameof(UIQuitController.Update), Type.EmptyTypes, nameof(NativeBackInputPrefix), null);
         Patch(typeof(UIQuitController), nameof(UIQuitController.OnExcapeButtonClicked), Type.EmptyTypes, nameof(NativeBackInputPrefix), null);
-        Patch(typeof(GameController), nameof(GameController.CountHeroData), new[] { typeof(HeroData) }, nameof(CountHeroDataPrefix), null);
+        Patch(typeof(GameController), nameof(GameController.CountHeroData), new[] { typeof(HeroData), typeof(bool) }, nameof(CountHeroDataPrefix), null);
         Patch(typeof(ItemIconController), nameof(ItemIconController.OnClick), Type.EmptyTypes, null, nameof(ItemClickedPostfix));
         Patch(typeof(HeroData), nameof(HeroData.GetMaxTagNum), Type.EmptyTypes, null, nameof(GetMaxTagNumPostfix));
         Patch(typeof(CraftUIController), nameof(CraftUIController.GetCraftFinalValue), Type.EmptyTypes, null, nameof(CraftFinalValuePostfix));

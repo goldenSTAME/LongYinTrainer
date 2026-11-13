@@ -1,14 +1,14 @@
 # 龙胤立志传 修改器
 
-**新手推荐：[一键安装 EXE（修正版 0.4.30.5）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.5/LongYinTrainer-Setup-0.4.30.5.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
+**新手推荐：[一键安装 EXE（修正版 0.4.30.20）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.20/LongYinTrainer-Setup-0.4.30.20.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
 
-**下载：[0.4.30.5 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.5/LongYinTrainer-0.4.30.5.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.5/LongYinTrainer-0.4.30.5.zip.sha256)**
+**下载：[0.4.30.20 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.20/LongYinTrainer-0.4.30.20.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.20/LongYinTrainer-0.4.30.20.zip.sha256)**
 
 > **体验提醒：这是较为暴力的修改器，会明显破坏游戏数值平衡，降低战斗难度，改变养成和探索节奏，影响原本的游戏体验。建议先体验原版，使用前备份存档，并按需开启功能。展示截图为修改后的效果，不代表原版或默认开启效果。**
 
 **界面与文档语言：简体中文（zh-CN）｜开发语言：C#｜平台：Windows x64**
 
-《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.30.17**（上方公开下载仍为 0.4.30.5）。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
+《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.30.20**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
 
 **进入存档后按 H 打开 / 收起面板。H 只控制面板显示，各功能需要单独开启或应用；收起面板不会关闭已开启的功能。**
 
@@ -17,6 +17,12 @@
 - [开发者：编译、打包与发布教程](docs/BUILD.md)
 - [手动移除／恢复功法与误删恢复](docs/KUNGFU-REMOVAL.md)
 
+## 0.4.30.20：游戏 1.1.3f0 接口适配
+
+- 修复战斗准备、角色属性重算新增参数造成的补丁绑定失败。
+- 新增可重复运行的兼容检查脚本和测试用例清单，见 [兼容测试](docs/COMPATIBILITY-TESTS.md)。
+- 已通过编译、10 组模拟回归及新版启动检查。旧档保存重载、实际战斗、面板交互、官方与 MOD 自创武学共存尚未完成实机验证；构造函数补丁仍有回退警告。
+- 本版不包含复用官方自创武学编辑器的改造。
 ## 0.4.30.5 更新（2026-10-13）
 
 - 补齐武学奇才等十种大地图世界奇遇，以及日期相关的中元鬼市。
@@ -97,3 +103,4 @@
 
 ## 0.4.30.4 更新
 适配游戏更新后的自创功法编辑器，统一势力与类别名称，改进本地图标加载和诊断；增加群战逐人处置、城市属性锁定及其他门派功绩编辑。最新图标行为仍待实机复测。
+
