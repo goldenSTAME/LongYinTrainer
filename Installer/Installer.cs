@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Net;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -11,7 +10,7 @@ using System.Windows.Forms;
 
 internal static class InstallCore
 {
-    internal const string ModVersion = "0.4.30.5";
+    internal const string ModVersion = "0.4.30.21";
     internal const string LoaderUrl = "https://builds.bepinex.dev/projects/bepinex_be/785/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.785%2B6abdba4.zip";
     internal const string LoaderHash = "2A7CBF74D26ABE4765C3E662DB1721B923BAC39849EBFEF2CA5DC7DE7E2D9B7F";
     internal static string Hash(string file)
@@ -69,6 +68,22 @@ internal static class InstallCore
         string ini = File.ReadAllText(doorstop).Replace("/", "\\");
         if (!System.Text.RegularExpressions.Regex.IsMatch(ini, @"(?im)^\s*enabled\s*=\s*true\s*$") ||
             !System.Text.RegularExpressions.Regex.IsMatch(ini, @"(?im)^\s*target_assembly\s*=\s*BepInEx\\core\\BepInEx.Unity.IL2CPP.dll\s*$")) return false;
+        // Compare the tested loader's complete binary manifest, not just five marker files.
+        using (var manifest = Assembly.GetExecutingAssembly().GetManifestResourceStream("LoaderManifest"))
+        {
+            if (manifest == null) return false;
+            using (var reader = new StreamReader(manifest))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    int separator = line.IndexOf("  ", StringComparison.Ordinal);
+                    if (separator != 64) throw new IOException("加载器文件清单损坏。");
+                    string file = SafePath(root, line.Substring(separator + 2));
+                    if (!File.Exists(file) || !String.Equals(Hash(file), line.Substring(0, separator), StringComparison.OrdinalIgnoreCase)) return false;
+                }
+            }
+        }
         return true;
     }
     internal static void Apply(string source, string target)
@@ -115,17 +130,14 @@ internal static class InstallCore
 
 internal sealed class InstallerWindow : Form
 {
-    sealed class DownloadClient : WebClient
-    {
-        protected override WebRequest GetWebRequest(Uri address)
-        {
-            var request = base.GetWebRequest(address); request.Timeout = 120000;
-            var http = request as HttpWebRequest; if (http != null) http.ReadWriteTimeout = 120000;
-            return request;
-        }
-    }
     readonly Label info = new Label(); readonly ProgressBar progress = new ProgressBar(); readonly Button closeButton = new Button();
     string root = AppDomain.CurrentDomain.BaseDirectory; bool busy;
+    string logPath;
+    void Log(string message)
+    {
+        try { File.AppendAllText(logPath, DateTime.Now.ToString("s") + " " + message + Environment.NewLine); }
+        catch { /* Diagnostic logging must not hide an installation failure. */ }
+    }
     public InstallerWindow()
     {
         Text = "龙胤立志传 修改器 · 一键安装 " + InstallCore.ModVersion; Width=630; Height=355; StartPosition=FormStartPosition.CenterScreen;
@@ -138,21 +150,24 @@ internal sealed class InstallerWindow : Form
         Shown += async delegate { await RunInstall(); };
         FormClosing += delegate(object sender, FormClosingEventArgs e) { if(busy) e.Cancel=true; };
     }
-    void Report(string value) { BeginInvoke((Action)(() => info.Text=value)); }
+    void Report(string value) { Log(value); BeginInvoke((Action)(() => info.Text=value)); }
     async Task RunInstall()
     {
+        logPath=Path.Combine(Path.GetTempPath(), "LongYinTrainer-Install-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".log");
+        Log("Installer " + InstallCore.ModVersion + "; target=" + root);
         busy=true; closeButton.Enabled=false; progress.Style=ProgressBarStyle.Marquee;
         try
         {
             string target=root;
             await Task.Run(() => Install(target));
-            info.Text="安装完成！\r\n启动游戏并读取存档，按 H 打开 / 收起修改器。\r\n首次启动 BepInEx 需要生成接口，可能还需联网，请耐心等待。\r\n\r\n这是较为暴力的修改，会影响游戏平衡与体验；修改前备份存档。";
+            Log("File installation verified; game startup has not been tested.");
+            info.Text="安装文件已校验完成（尚未验证游戏启动）。\r\n启动游戏并读取存档，按 H 打开修改器。\r\n首次生成接口仍可能需要联网，请等待。\r\n没反应请提供 BepInEx\\LogOutput.log；没有该文件请提供安装日志：\r\n" + logPath;
             progress.Style=ProgressBarStyle.Blocks; progress.Value=100;
             closeButton.Text="完成并关闭";
         }
-        catch (UnauthorizedAccessException ex) { info.Text="权限不足，安装已停止。请检查目录写入权限。\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
-        catch (Exception ex) { info.Text="安装未完成：\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
-        finally { busy=false; closeButton.Enabled=true; }
+        catch (UnauthorizedAccessException ex) { Log(ex.ToString()); info.Text="权限不足，安装已停止。请检查目录写入权限。\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
+        catch (Exception ex) { Log(ex.ToString()); info.Text="安装未完成：\r\n"+ex.Message; progress.Style=ProgressBarStyle.Blocks; }
+        finally { if (progress.Value != 100) info.Text += "\r\n安装日志：" + logPath; Log("Install window ready; log=" + logPath); busy=false; closeButton.Enabled=true; }
     }
     void Install(string target)
     {
@@ -169,11 +184,14 @@ internal sealed class InstallerWindow : Form
         string stage=Path.Combine(temp,"stage"); Directory.CreateDirectory(stage);
         if (!existing)
         {
-            Report("正在从 BepInEx 官方下载已验证的 IL2CPP x64 加载器（约 33 MB）…\r\n下载需要联网，关闭窗口将在安装结束后恢复。\r\n目标："+target);
+            Report("正在校验并安装内置 BepInEx 加载器，无需下载…\r\n目标："+target);
             string loader=Path.Combine(temp,"BepInEx.zip");
-            ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
-            using(var client=new DownloadClient()) client.DownloadFile(InstallCore.LoaderUrl,loader);
-            if(InstallCore.Hash(loader)!=InstallCore.LoaderHash) throw new IOException("BepInEx 下载校验失败，尚未修改游戏文件。请重新运行安装器。");
+            using (var resource=Assembly.GetExecutingAssembly().GetManifestResourceStream("LoaderPayload"))
+            {
+                if(resource==null) throw new IOException("安装器缺少内置加载器，请重新下载完整安装器。");
+                using(var file=File.Create(loader)) resource.CopyTo(file);
+            }
+            if(InstallCore.Hash(loader)!=InstallCore.LoaderHash) throw new IOException("内置加载器校验失败，尚未修改游戏文件。");
             InstallCore.Extract(loader,stage);
         }
         Report(existing ? "检测到 BepInEx 6 IL2CPP，保留加载器、配置与其他插件，正在安装修改器…" : "BepInEx 校验成功，正在安装加载器与修改器…");
@@ -190,6 +208,11 @@ internal sealed class InstallerWindow : Form
         // This game's Unity build crashes in IL2CPPUnityLogSource before plugins load.
         // Keep disk logging; disable only Unity log interception and the extra console.
         InstallCore.ConfigureGameLoader(target);
+        if (!InstallCore.HasCompatibleLoader(target)) throw new IOException("安装后的加载器完整性检查失败，请查看安装日志。");
+        Log("Verified plugin SHA256=" + InstallCore.Hash(Path.Combine(plugins,"LongYinTrainer.dll")));
+        string report=InstallCore.SafePath(target,"LongYinTrainer-install.log");
+        Log("Installed target=" + target);
+        File.Copy(logPath,report,true);
     }
     [STAThread] static void Main()
     {
