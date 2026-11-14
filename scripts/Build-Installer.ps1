@@ -1,7 +1,7 @@
-param([string]$GamePath, [string]$LoaderZip)
+﻿param([string]$GamePath, [string]$LoaderZip)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
-$source=Get-Content (Join-Path $repo 'LongYinTrainer\LongYinTrainer.cs') -Raw
+$source=Get-Content (Join-Path $repo 'LongYinTrainer\LongYinTrainer.cs') -Raw -Encoding UTF8
 $match=[regex]::Match($source,'BepInPlugin\("codex\.longyin\.trainer", "LongYin Trainer", "([0-9.]+)"\)')
 if(!$match.Success){throw '未找到版本号'}
 $version=$match.Groups[1].Value
@@ -25,7 +25,7 @@ try {
 } finally { $archive.Dispose() }
 $out=Join-Path $repo "dist\LongYinTrainer-Setup-$version.exe"
 if(Test-Path -LiteralPath $out){throw "安装器已存在：$out"}
-$installerSource=Get-Content (Join-Path $repo 'Installer\Installer.cs') -Raw
+$installerSource=Get-Content (Join-Path $repo 'Installer\Installer.cs') -Raw -Encoding UTF8
 $installerSource=[regex]::Replace($installerSource,'internal const string ModVersion = "[0-9.]+";',('internal const string ModVersion = "'+$version+'";'))
 $tempSource=Join-Path ([IO.Path]::GetTempPath()) ('LongYinInstaller-'+[guid]::NewGuid().ToString('N')+'.cs')
 [IO.File]::WriteAllText($tempSource,$installerSource,[Text.UTF8Encoding]::new($false))

@@ -82,11 +82,11 @@ public static partial class TrainerBehaviour
         void SaveInputs() { _catalogQuantity=quantity.text; _catalogLevel=level.text; _catalogRarity=rarity.text; }
         void UpdateSelection() {
             for(var i=0;i<12;i++) if(entries[i]!=null) ApplySprite(frames[i],_frameSprite,true,Color.white,
-                ReferenceEquals(entries[i],_catalogSelected) ? new Color(.72f,.12f,.08f,1f) : RarityColor(entries[i]!.RareLv));
+                ReferenceEquals(entries[i],_catalogSelected) ? new Color(.72f,.12f,.08f,1f) : RarityColor(CatalogDisplayGrade(entries[i]!)));
         }
         void UpdateGrid() {
             updateBookFilters();
-            help.gameObject.SetActive(categories[Math.Clamp(_catalogCategory,0,categories.Count-1)] != "秘籍");
+            help.gameObject.SetActive(categories[Math.Clamp(_catalogCategory,0,categories.Count-1)] is not ("秘籍" or "药品" or "食物"));
             filtered=FilterCatalog(categories[Math.Clamp(_catalogCategory,0,categories.Count-1)],_catalogSearch);
             pageCount=Math.Max(1,(filtered.Count+11)/12); _catalogPage=Math.Clamp(_catalogPage,0,pageCount-1);
             for(var i=0;i<categories.Count;i++) {
@@ -102,7 +102,7 @@ public static partial class TrainerBehaviour
                 icons[i].sprite=GetItemSprite(e.IconName); icons[i].enabled=icons[i].sprite!=null;
                 if(icons[i].enabled) found++;
                 missing[i].gameObject.SetActive(!icons[i].enabled);
-                gems[i].sprite=GetItemSprite("RareLv"+Math.Clamp(e.RareLv,0,5)); gems[i].enabled=gems[i].sprite!=null;
+                gems[i].sprite=GetItemSprite("RareLv"+Math.Clamp(CatalogDisplayGrade(e),0,5)); gems[i].enabled=gems[i].sprite!=null;
             }
             pageLabel.text=$"第 {_catalogPage+1} / {pageCount} 页　共 {filtered.Count} 项";
             UpdateSelection();
@@ -111,9 +111,9 @@ public static partial class TrainerBehaviour
         void UpdateDetails() {
             var e=_catalogSelected;
             title.text=e?.Name ?? "从左侧图鉴选择物品";
-            detail.text=e?.Detail ?? "列表直接读取当前游戏版本的数据。\n即使背包里没有，也可以直接添加。";
+            detail.text=e != null ? e.Detail + (e.Category is "药品" or "食物" ? $"\n原生等级：{LevelName(e.BaseLevel)}（{e.BaseLevel}）" : "") : "列表直接读取当前游戏版本的数据。\n即使背包里没有，也可以直接添加。";
             var usesLevel=e!=null && (e.IsEquipment || e.Category=="材料" || e.Category=="宝物");
-            var usesRarity=e!=null && (usesLevel || e.Category=="秘籍");
+            var usesRarity=e!=null && (usesLevel || e.Category=="秘籍" || e.Category=="药品" || e.Category=="食物");
             levelLabel.gameObject.SetActive(usesLevel); level.gameObject.SetActive(usesLevel);
             rareLabel.gameObject.SetActive(usesRarity); rarity.gameObject.SetActive(usesRarity);
             _catalogLevelInput=usesLevel ? level : null; _catalogRarityInput=usesRarity ? rarity : null; _catalogPreviewText=preview;

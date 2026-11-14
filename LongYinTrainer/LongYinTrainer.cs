@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.28")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.29")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -4915,7 +4915,7 @@ public static partial class TrainerBehaviour
             if (resolvedBaseDonorId < 0) throw new InvalidOperationException($"总母版 ID {record.BaseDonorId} 无效，且没有可回退的来源功法");
             record.BaseDonorId = resolvedBaseDonorId;
             ValidateCustomKungfuDonors(database, record);
-            if (BuildCustomKungfuDefinition(database, record) == null) throw new InvalidOperationException("无法根据当前元素组合生成定义");
+            SummonSkillValidation.Validate(BuildCustomKungfuDefinition(database, record) ?? throw new InvalidOperationException("无法根据当前元素组合生成定义"));
 
             var candidate = new CustomKungfuStore
             {
@@ -5019,6 +5019,7 @@ public static partial class TrainerBehaviour
             if (!record.RemovedContent) ValidateCustomKungfuDonors(database, record);
             var rebuilt = BuildCustomKungfuDefinition(database, record)
                 ?? throw new InvalidOperationException($"功法 {record.Name}（ID {record.Id}）无法从保存数据重建");
+            SummonSkillValidation.Validate(rebuilt);
             ValidateUtilityNativeDefinition(database, record, rebuilt);
         }
         File.WriteAllText(temp, json, new UTF8Encoding(false));
@@ -5731,7 +5732,7 @@ public static partial class TrainerBehaviour
         InputField? rarity = null;
         var customEquipment = selected?.IsEquipment == true;
         var usesLevel = selected != null && (customEquipment || selected.Category == "材料" || selected.Category == "宝物");
-        var usesRarity = selected != null && (customEquipment || selected.Category == "秘籍" || usesLevel);
+        var usesRarity = selected != null && (customEquipment || selected.Category == "秘籍" || selected.Category == "药品" || selected.Category == "食物" || usesLevel);
         if (usesRarity)
         {
             if (usesLevel)
@@ -5955,6 +5956,7 @@ public static partial class TrainerBehaviour
         {
             var entry = Catalog[i];
             if (category != "全部" && entry.Category != category) continue;
+            if ((category is "药品" or "食物") && _consumableLevelFilter >= 0 && entry.BaseLevel != _consumableLevelFilter) continue;
             if (category == "秘籍" && !BookCatalogRules.Matches(entry.SkillType, entry.RareLv, _bookTypeFilter, _bookRarityFilter)) continue;
             if (!string.IsNullOrWhiteSpace(search) && entry.Name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0
                 && entry.Detail.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0
@@ -5967,6 +5969,11 @@ public static partial class TrainerBehaviour
             if (a.Kind == CatalogKind.Book && b.Kind == CatalogKind.Book) {
                 var order = BookCatalogRules.Compare(a.SkillType, a.RareLv, b.SkillType, b.RareLv);
                 if (order != 0) return order;
+            }
+            if (a.Category == b.Category && (a.Category is "药品" or "食物"))
+            {
+                var levelOrder = b.BaseLevel.CompareTo(a.BaseLevel);
+                if (levelOrder != 0) return levelOrder;
             }
             return string.Compare(a.Name, b.Name, StringComparison.CurrentCulture);
         });
@@ -6168,6 +6175,7 @@ public static partial class TrainerBehaviour
                     ? GenerateEquipment(entry, level, rarity, player)
                     : CreateCatalogItem(entry, level, rarity);
                 if (item == null) continue;
+                if (entry.Category is "药品" or "食物") item.rareLv = rarity;
                 player.GetItem(item, false, false, 0, true);
                 added++;
             }
@@ -6186,6 +6194,22 @@ public static partial class TrainerBehaviour
         var equipment = source?.equipmentData;
         var controller = GameController.Instance;
         if (source == null || equipment == null || controller == null) return null;
+        if (entry.Category == "武器")
+        {
+            // Use the explicit weapon template overload; the value-based generator
+            // can choose a different weapon and cannot guarantee the requested level.
+            for (var attempt = 0; attempt < 128; attempt++)
+            {
+                var weapon = controller.GenerateWeapon(desiredLevel, entry.ItemId,
+                    Math.Max(1f, desiredRarity + 1f), player);
+                if (weapon?.equipmentData == null || weapon.itemLv != desiredLevel ||
+                    weapon.rareLv != desiredRarity || weapon.subType != source.subType ||
+                    weapon.equipmentData.littleType != equipment.littleType) continue;
+                LongYinTrainerPlugin.Logger.LogInfo($"Weapon generated: template={entry.ItemId}, level={weapon.itemLv}, rarity={weapon.rareLv}, subtype={weapon.subType}, littleType={weapon.equipmentData.littleType}, attempts={attempt + 1}");
+                return weapon;
+            }
+            throw new InvalidOperationException($"未生成匹配的武器（模板 {entry.ItemId}，等级 {desiredLevel}，稀有度 {desiredRarity}），未添加替代品。请重试。");
+        }
         ItemData? best = null;
         var bestScore = int.MaxValue;
         var bossLv = Math.Max(1f, desiredLevel + 1f);

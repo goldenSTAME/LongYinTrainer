@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine.UI;
@@ -87,6 +87,11 @@ internal static class NativeKungfuEditor
         _activeDraft = editor.draftSkillData?.Pointer ?? IntPtr.Zero;
         var donor = GameDataController.Instance.kungfuSkillDataBase[id];
         TrainerBehaviour.ApplyNativeVisualSource(editor.draftSkillData ?? throw new InvalidOperationException("官方草稿创建失败"), donor, "all");
+        if (donor.targetType == SkillTargetType.EmptyGridSummon)
+        {
+            editor.draftSkillData.targetType = donor.targetType;
+            editor.draftSkillData.summonID = donor.summonID;
+        }
         editor.RefreshSkillIcon();
         NativeKungfuFields.AutomaticDescription = editor.skillDescribe.text;
         ChoosingBase = false;
@@ -144,6 +149,11 @@ internal static class NativeKungfuEditor
     private static bool BeginConfirm(CustomSkillCreateController __instance)
     {
         if (Owns(__instance) && ChoosingBase) { NativeKungfuFields.ChooseBaseCategory(); return false; }
+        if (Owns(__instance))
+        {
+            try { SummonSkillValidation.Validate(__instance.draftSkillData); }
+            catch (Exception ex) { __instance.ShowSubmitError(ex.Message); LongYinTrainerPlugin.Logger.LogWarning(ex.Message); return false; }
+        }
         return true;
     }
 
