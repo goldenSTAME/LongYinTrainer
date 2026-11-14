@@ -1,14 +1,14 @@
-﻿# 龙胤立志传 修改器安装教程（BepInEx）
+# 龙胤立志传 修改器安装教程（BepInEx）
 
 ## 推荐：一键安装 EXE
 
-下载 `LongYinTrainer-Setup-0.4.31.27.exe`，退出游戏，将它放到 `LongYinLiZhiZhuan.exe` 同级后双击。安装器内置 Mod 与经过校验的 BepInEx 785，安装阶段无需联网下载加载器；已有加载器通过完整文件校验时保留，缺失或损坏时补装。游戏首次生成接口仍可能需要联网。不创建备份目录，按需直接覆盖安装。完成后启动游戏，进入存档按 H。详细说明见仓库 `docs/ONE-CLICK.md`。以下手动安装步骤适用于 ZIP 包。
+下载 `LongYinTrainer-Setup-0.4.31.28.exe`，退出游戏，将它放到 `LongYinLiZhiZhuan.exe` 同级后双击。安装器内置 Mod 与经过校验的 BepInEx 785，安装阶段无需联网下载加载器；已有加载器通过完整文件校验时保留，缺失或损坏时补装。游戏首次生成接口仍可能需要联网。不创建备份目录，按需直接覆盖安装。完成后启动游戏，进入存档按 H。详细说明见仓库 `docs/ONE-CLICK.md`。以下手动安装步骤适用于 ZIP 包。
 
 安装后进入存档，按 **H** 打开 / 收起“江湖札记”。H 只控制面板显示，各项功能需单独开启，详见 [使用说明](USAGE.md)。发布包同时附带本安装教程和 USAGE.md。
 
 ## 发布包是否完整？
 
-`LongYinTrainer-0.4.31.27.zip` 是完整的 **Mod 插件包**，包含 `BepInEx/plugins/LongYinTrainer.dll` 和本教程；它不是包含加载器的整合包。首次安装需要额外下载下面的 BepInEx。已经正确安装 BepInEx 的玩家只需更新 Mod DLL。无需旧图片、开发工具、游戏解包数据，也不需要安装 .NET SDK。
+`LongYinTrainer-0.4.31.28.zip` 是完整的 **Mod 插件包**，包含 `BepInEx/plugins/LongYinTrainer.dll` 和本教程；它不是包含加载器的整合包。首次安装需要额外下载下面的 BepInEx。已经正确安装 BepInEx 的玩家只需更新 Mod DLL。无需旧图片、开发工具、游戏解包数据，也不需要安装 .NET SDK。
 
 ## 第一步：安装 BepInEx（首次安装必做）
 
@@ -63,7 +63,7 @@
 
 
 ## 手动安装的启动兼容设置
-在 BepInEx/config/BepInEx.cfg 的 [Logging] 节设置 UnityLogListening = false，否则本游戏可能在加载器初始化时崩溃。[Logging.Console] 节可设置 Enabled = false 关闭控制台。0.4.31.27 安装器会自动完成这两项设置，磁盘日志保留。
+在 BepInEx/config/BepInEx.cfg 的 [Logging] 节设置 UnityLogListening = false，否则本游戏可能在加载器初始化时崩溃。[Logging.Console] 节可设置 Enabled = false 关闭控制台。0.4.31.28 安装器会自动完成这两项设置，磁盘日志保留。
 安装器只支持放在游戏根目录运行，没有目录选择窗口。
 
 

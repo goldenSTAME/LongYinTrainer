@@ -18,6 +18,23 @@ internal static class InstallCore
         using (var sha = SHA256.Create()) using (var stream = File.OpenRead(file))
             return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
     }
+    internal static void ValidatePluginLayout(string target)
+    {
+        string plugins = SafePath(target, "BepInEx/plugins");
+        if (!Directory.Exists(plugins)) return;
+        string canonical = Path.Combine(plugins, "LongYinTrainer.dll");
+        var conflicts = new List<string>();
+        foreach (string path in Directory.GetFiles(plugins, "*.dll", SearchOption.AllDirectories))
+        {
+            SafePath(target, path.Substring(Path.GetFullPath(target).TrimEnd(Path.DirectorySeparatorChar).Length + 1));
+            if (String.Equals(Path.GetFullPath(path), canonical, StringComparison.OrdinalIgnoreCase)) continue;
+            bool trainer = String.Equals(Path.GetFileName(path), "LongYinTrainer.dll", StringComparison.OrdinalIgnoreCase);
+            try { trainer |= String.Equals(AssemblyName.GetAssemblyName(path).Name, "LongYinTrainer", StringComparison.OrdinalIgnoreCase); }
+            catch (BadImageFormatException) { /* Native DLLs are not managed plugins. */ }
+            if (trainer) conflicts.Add(path);
+        }
+        if (conflicts.Count > 0) throw new IOException("发现重复的修改器 DLL（包括改名副本）。请先将下列文件移出 BepInEx/plugins 再安装；尚未覆盖游戏文件：\r\n" + String.Join("\r\n", conflicts.ToArray()));
+    }
     internal static string SafePath(string root, string relative)
     {
         if (String.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Contains(":")) throw new IOException("安装包路径无效：" + relative);
@@ -173,11 +190,7 @@ internal sealed class InstallerWindow : Form
     {
         InstallCore.ValidateGame(target,true);
         bool existing=InstallCore.HasCompatibleLoader(target);
-        string pluginDir=InstallCore.SafePath(target,"BepInEx/plugins");
-        if(Directory.Exists(pluginDir))
-            foreach(var duplicate in Directory.GetFiles(pluginDir,"LongYinTrainer.dll",SearchOption.AllDirectories))
-                if(!String.Equals(Path.GetFullPath(duplicate),Path.Combine(pluginDir,"LongYinTrainer.dll"),StringComparison.OrdinalIgnoreCase))
-                    throw new IOException("发现子目录中的旧 Mod，请先将它移出 plugins，避免重复加载："+duplicate);
+        InstallCore.ValidatePluginLayout(target);
         string probe=InstallCore.SafePath(target,".longyin-write-test-"+Guid.NewGuid().ToString("N"));
         using(var file=new FileStream(probe,FileMode.CreateNew,FileAccess.Write,FileShare.None,1,FileOptions.DeleteOnClose)) file.WriteByte(0);
         string temp=Path.Combine(Path.GetTempPath(),"LongYinInstaller-"+Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp);
