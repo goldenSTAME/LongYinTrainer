@@ -28,6 +28,10 @@
     <Reference Include="UnityEngine.UIModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.UIModule.dll</HintPath></Reference>
     <Reference Include="UnityEngine.VideoModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.VideoModule.dll</HintPath></Reference>
   </ItemGroup>
+  <ItemGroup>
+    <Reference Include="UnityEngine.ParticleSystemModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.ParticleSystemModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(GamePath)\BepInEx\interop\UnityEngine.AudioModule.dll</HintPath></Reference>
+  </ItemGroup>
   <Target Name="ValidateGamePath" BeforeTargets="ResolveAssemblyReferences">
     <Error Condition="!Exists('$(GamePath)/BepInEx/interop/Assembly-CSharp.dll')" Text="请通过 -p:GamePath=游戏目录 或 LONGYIN_GAME_PATH 指定已生成 BepInEx interop 的游戏安装目录。" />
   </Target>

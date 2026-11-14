@@ -36,6 +36,14 @@ class InstallerTests
         Check(!InstallCore.HasCompatibleLoader(broken),"missing core requests repair");
         InstallCore.Apply(loader,broken);
         Check(InstallCore.HasCompatibleLoader(broken),"missing core repaired successfully");
+        string dependency=Path.Combine(broken,"BepInEx/core/Il2CppInterop.Runtime.dll");
+        File.Delete(dependency);
+        Check(!InstallCore.HasCompatibleLoader(broken),"missing interop dependency requests repair");
+        InstallCore.Apply(loader,broken);
+        File.WriteAllText(Path.Combine(broken,"dotnet/coreclr.dll"),"corrupted");
+        Check(!InstallCore.HasCompatibleLoader(broken),"corrupted runtime requests repair even when marker exists");
+        InstallCore.Apply(loader,broken);
+        Check(InstallCore.HasCompatibleLoader(broken),"full manifest passes after repair");
         InstallCore.ConfigureGameLoader(fresh);
         string cfg=Path.Combine(fresh,"BepInEx/config/BepInEx.cfg");
         Check(File.ReadAllText(cfg).Contains("UnityLogListening = false"),"fresh install disables crashing Unity log hook");

@@ -1,14 +1,14 @@
-# 龙胤立志传 修改器
+﻿# 龙胤立志传 修改器
 
-**新手推荐：[一键安装 EXE（修正版 0.4.30.20）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.20/LongYinTrainer-Setup-0.4.30.20.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。首次安装需联网下载约 33 MB 的官方加载器；已有兼容加载器时只更新 Mod。详见 [一键安装说明](docs/ONE-CLICK.md)。
+**新手推荐：[一键安装 EXE（修正版 0.4.31.27）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.27/LongYinTrainer-Setup-0.4.31.27.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。安装器内置约 33 MB 的官方加载器，安装阶段无需下载；首次启动生成接口仍可能联网。已有加载器会检查完整性。详见 [一键安装说明](docs/ONE-CLICK.md)。
 
-**下载：[0.4.30.20 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.20/LongYinTrainer-0.4.30.20.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.30.20/LongYinTrainer-0.4.30.20.zip.sha256)**
+**下载：[0.4.31.27 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.27/LongYinTrainer-0.4.31.27.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.27/LongYinTrainer-0.4.31.27.zip.sha256)**
 
 > **体验提醒：这是较为暴力的修改器，会明显破坏游戏数值平衡，降低战斗难度，改变养成和探索节奏，影响原本的游戏体验。建议先体验原版，使用前备份存档，并按需开启功能。展示截图为修改后的效果，不代表原版或默认开启效果。**
 
 **界面与文档语言：简体中文（zh-CN）｜开发语言：C#｜平台：Windows x64**
 
-《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.30.20**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
+《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.31.27**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
 
 **进入存档后按 H 打开 / 收起面板。H 只控制面板显示，各功能需要单独开启或应用；收起面板不会关闭已开启的功能。**
 
@@ -17,12 +17,16 @@
 - [开发者：编译、打包与发布教程](docs/BUILD.md)
 - [手动移除／恢复功法与误删恢复](docs/KUNGFU-REMOVAL.md)
 
-## 0.4.30.20：游戏 1.1.3f0 接口适配
+## 0.4.31.27：原生自创武学扩展与安装修复（2026-11-14）
 
-- 修复战斗准备、角色属性重算新增参数造成的补丁绑定失败。
-- 新增可重复运行的兼容检查脚本和测试用例清单，见 [兼容测试](docs/COMPATIBILITY-TESTS.md)。
-- 已通过编译、10 组模拟回归及新版启动检查。旧档保存重载、实际战斗、面板交互、官方与 MOD 自创武学共存尚未完成实机验证；构造函数补丁仍有回退警告。
-- 本版不包含复用官方自创武学编辑器的改造。
+- 适配游戏 1.1.3f0，复用官方自创武学窗口；藏经阁保留旧“自创功法”并增加新版“自创武学”入口。
+- 支持选择基础功法、调整稀有度、属性加成、完整效果目录、范围与架势、图标导入、动作和特效搭配；来源列表提供搜索与筛选。
+- 视觉预览按动作出招事件触发特效；无事件时明确标注估算时机。预览不等于多目标、多连击的完整实战演出。
+- 安装器内置并校验 BepInEx 785，修复缺失或损坏的加载器，记录安装日志；自动关闭本游戏存在兼容问题的 Unity 日志拦截。
+- 已在正式 Steam 游戏目录移走旧加载器与全部插件后，用发布 EXE 安装并经 Steam 启动，确认插件加载、H 面板打开及原生编辑器入口；25 项安装器检查通过。
+- **旧存档依赖的自创功法数据必须保留**：`BepInEx/config/LongYinTrainer.custom-kungfu.json` 和 `LongYinTrainer.CustomKungfuIcons`。不要为了更新删掉整个 config。安装器正常升级会保留它们。
+- 旧存档全功能、所有效果组合及保存读回未逐一验证；具体测试记录见 [发布验证](docs/RELEASE-0.4.31.27.md)。
+
 ## 0.4.30.5 更新（2026-10-13）
 
 - 补齐武学奇才等十种大地图世界奇遇，以及日期相关的中元鬼市。

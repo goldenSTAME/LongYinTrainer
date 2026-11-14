@@ -1,14 +1,14 @@
-# 龙胤立志传 修改器安装教程（BepInEx）
+﻿# 龙胤立志传 修改器安装教程（BepInEx）
 
 ## 推荐：一键安装 EXE
 
-下载 `LongYinTrainer-Setup-0.4.27.exe`，退出游戏，将它放到 `LongYinLiZhiZhuan.exe` 同级后双击。安装器内置 Mod，首次安装自动联网下载并校验官方 BepInEx；已有完整 BepInEx 时只更新 Mod，缺文件时自动补装加载器。不创建备份目录，按需直接覆盖安装。完成后启动游戏，进入存档按 H。详细说明见仓库 `docs/ONE-CLICK.md`。以下手动安装步骤适用于 ZIP 包。
+下载 `LongYinTrainer-Setup-0.4.31.27.exe`，退出游戏，将它放到 `LongYinLiZhiZhuan.exe` 同级后双击。安装器内置 Mod 与经过校验的 BepInEx 785，安装阶段无需联网下载加载器；已有加载器通过完整文件校验时保留，缺失或损坏时补装。游戏首次生成接口仍可能需要联网。不创建备份目录，按需直接覆盖安装。完成后启动游戏，进入存档按 H。详细说明见仓库 `docs/ONE-CLICK.md`。以下手动安装步骤适用于 ZIP 包。
 
 安装后进入存档，按 **H** 打开 / 收起“江湖札记”。H 只控制面板显示，各项功能需单独开启，详见 [使用说明](USAGE.md)。发布包同时附带本安装教程和 USAGE.md。
 
 ## 发布包是否完整？
 
-`LongYinTrainer-0.4.27.zip` 是完整的 **Mod 插件包**，包含 `BepInEx/plugins/LongYinTrainer.dll` 和本教程；它不是包含加载器的整合包。首次安装需要额外下载下面的 BepInEx。已经正确安装 BepInEx 的玩家只需更新 Mod DLL。无需旧图片、开发工具、游戏解包数据，也不需要安装 .NET SDK。
+`LongYinTrainer-0.4.31.27.zip` 是完整的 **Mod 插件包**，包含 `BepInEx/plugins/LongYinTrainer.dll` 和本教程；它不是包含加载器的整合包。首次安装需要额外下载下面的 BepInEx。已经正确安装 BepInEx 的玩家只需更新 Mod DLL。无需旧图片、开发工具、游戏解包数据，也不需要安装 .NET SDK。
 
 ## 第一步：安装 BepInEx（首次安装必做）
 
@@ -40,7 +40,7 @@
       LongYinTrainer.dll
 ```
 
-重新启动游戏，按 **H**。日志应出现 `Loading [LongYin Trainer 0.4.27]`。游戏退出后再更换 DLL。已有旧版时将旧 DLL 备份到 plugins 目录之外，防止重复加载。
+重新启动游戏，按 **H**。日志应出现 `Loading [LongYin Trainer 0.4.31]` 和 `LongYin Trainer loaded`（加载器可能省略第四段版本号）。游戏退出后再更换 DLL。已有旧版时将旧 DLL 备份到 plugins 目录之外，防止重复加载。
 
 ## 常见问题
 
@@ -63,6 +63,16 @@
 
 
 ## 手动安装的启动兼容设置
-在 BepInEx/config/BepInEx.cfg 的 [Logging] 节设置 UnityLogListening = false，否则本游戏可能在加载器初始化时崩溃。[Logging.Console] 节可设置 Enabled = false 关闭控制台。0.4.27 安装器会自动完成这两项设置，磁盘日志保留。
+在 BepInEx/config/BepInEx.cfg 的 [Logging] 节设置 UnityLogListening = false，否则本游戏可能在加载器初始化时崩溃。[Logging.Console] 节可设置 Enabled = false 关闭控制台。0.4.31.27 安装器会自动完成这两项设置，磁盘日志保留。
 安装器只支持放在游戏根目录运行，没有目录选择窗口。
 
+
+## 安装后仍没反应
+
+不要继续安装 0.4.30.4，它早于 1.1.3f0 接口适配。退出游戏后使用当前安装包，进入存档按 H。安装完成只代表文件已校验，不代表游戏启动已验证。反馈时提供游戏版本与 `BepInEx/LogOutput.log`；若没有该日志，提供游戏目录的 `LongYinTrainer-install.log`，或安装窗口显示的临时日志路径。无需安装开发用 .NET SDK。
+
+## 旧存档与自创功法数据
+
+更新时不要删除 `BepInEx/config`。旧 MOD 自创功法的定义保存在 `LongYinTrainer.custom-kungfu.json`，自定义图标在 `LongYinTrainer.CustomKungfuIcons` 文件夹，游戏存档只引用对应编号。缺少定义时可能出现 `GetSkillDataBase` 的 `KeyNotFoundException`、属性上限异常或内容缺失。应退出游戏、恢复备份中的定义及图标后重新读档，不要在异常状态下覆盖存档。
+
+安装器默认关闭黑色控制台窗口，窗口没出现不代表 MOD 没有加载。进入存档按 H，检查 `BepInEx/LogOutput.log`。
