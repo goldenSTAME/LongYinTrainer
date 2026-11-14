@@ -12,6 +12,7 @@ if (!(Test-Path -LiteralPath $LoaderZip)) { throw '请提供 -LoaderZip：官方
 $expected='2A7CBF74D26ABE4765C3E662DB1721B923BAC39849EBFEF2CA5DC7DE7E2D9B7F'
 if ((Get-FileHash -LiteralPath $LoaderZip).Hash -ne $expected) { throw '加载器 SHA256 不匹配' }
 $manifest=Join-Path ([IO.Path]::GetTempPath()) ('LongYinLoader-'+[guid]::NewGuid().ToString('N')+'.txt')
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive=[IO.Compression.ZipFile]::OpenRead($LoaderZip)
 try {
     $lines=foreach($entry in $archive.Entries) {
