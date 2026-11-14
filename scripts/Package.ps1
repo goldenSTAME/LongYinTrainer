@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$GamePath)
+﻿param([Parameter(Mandatory=$true)][string]$GamePath)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 & (Join-Path $PSScriptRoot 'Build.ps1') -GamePath $GamePath

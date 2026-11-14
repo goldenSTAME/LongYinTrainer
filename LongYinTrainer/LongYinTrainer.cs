@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.30.21")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.27")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -121,6 +121,7 @@ public sealed class LongYinTrainerPlugin : BasePlugin
         Config.Save();
         TrainerBehaviour.InitializeCustomKungfuStorage();
         _harmony = new Harmony("codex.longyin.trainer");
+        NativeKungfuEditor.Install(_harmony, Config);
         BuildingCombat.Install(_harmony, Config);
         foreach (var method in typeof(AreaData).GetMethods())
             if (method.Name is "ChangePeople" or "ChangeSafe" or "ChangeSupport" or "ChangeDefence" or "ChangeAreaState" or "ResetAllState")
@@ -1844,7 +1845,16 @@ public static partial class TrainerBehaviour
     public static bool TryResolveUploadedIcon(string key, out Sprite? sprite)
     {
         sprite = null;
-        if (key == null || !UploadedIconKeys.TryGetValue(key, out var found) || found == null) return false;
+        if (key == null) return false;
+        const string prefix = "LongYinTrainer.Uploaded.";
+        if (!UploadedIconKeys.TryGetValue(key, out var found) && key.StartsWith(prefix, StringComparison.Ordinal)) {
+            var file = key.Substring(prefix.Length);
+            // Persist the native iconName key; reload only normalized files in the mod icon directory.
+            if (file != NormalizeCustomKungfuIconFile(file)) return false;
+            found = GetCustomKungfuIconSprite(file);
+            if (found != null) UploadedIconKeys[key] = found;
+        }
+        if (found == null) return false;
         sprite = found;
         return true;
     }
@@ -1973,7 +1983,19 @@ public static partial class TrainerBehaviour
         if (texture == null) return null;
         try
         {
-            var sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+            // Center-crop to a square and mask to the native round icon silhouette.
+            var side = Math.Min(texture.width, texture.height);
+            var pixels = texture.GetPixels((texture.width - side) / 2, (texture.height - side) / 2, side, side);
+            for (var y = 0; y < side; y++) for (var x = 0; x < side; x++) {
+                var dx = x + .5f - side / 2f; var dy = y + .5f - side / 2f;
+                var alpha = Mathf.Clamp01(side / 2f - Mathf.Sqrt(dx * dx + dy * dy));
+                var color = pixels[y * side + x]; color.a *= alpha; pixels[y * side + x] = color;
+            }
+            var cropped = new Texture2D(side, side, TextureFormat.RGBA32, false);
+            cropped.SetPixels(pixels); cropped.Apply(false, false);
+            cropped.filterMode = FilterMode.Bilinear; cropped.wrapMode = TextureWrapMode.Clamp;
+            UnityEngine.Object.DontDestroyOnLoad(cropped);
+            var sprite = Sprite.Create(cropped, new Rect(0f, 0f, side, side), new Vector2(0.5f, 0.5f), 100f);
             if (sprite == null) throw new InvalidOperationException("Unity Sprite.Create 返回空对象");
             sprite.name = "LongYinTrainerCustomKungfuSprite_" + Path.GetFileNameWithoutExtension(file);
             UnityEngine.Object.DontDestroyOnLoad(sprite);
@@ -2010,6 +2032,31 @@ public static partial class TrainerBehaviour
         if (_customDraft == null) return;
         try
         {
+            var fileName = CopyCustomKungfuIcon(selected, out var displayName, out var validatedWidth, out var validatedHeight);
+            _customDraft.CustomIconFile = fileName;
+            if (_customBattlePreviewActive) SetRuntimeCustomKungfuIconFile(_customBattlePreviewSkillId, fileName);
+            _customStatus = $"已导入本地图标：{displayName}（{validatedWidth}×{validatedHeight}）；保存功法后永久生效。";
+            InvalidateCustomKungfuPages();
+            ShowCustomKungfuTab();
+        }
+        catch (Exception ex)
+        {
+            _customStatus = "本地图标导入失败：" + ex.Message;
+            LongYinTrainerPlugin.Logger.LogWarning($"Custom kungfu icon import failed: path={selected}, exception={ex}");
+        }
+    }
+
+    internal static string? ImportNativeKungfuIcon()
+    {
+        var selected = ShowCustomKungfuIconFilePicker();
+        if (string.IsNullOrEmpty(selected)) return null;
+        var file = CopyCustomKungfuIcon(selected, out _, out _, out _);
+        var key = "LongYinTrainer.Uploaded." + file;
+        UploadedIconKeys[key] = GetCustomKungfuIconSprite(file)!;
+        return key;
+    }
+    private static string CopyCustomKungfuIcon(string selected, out string displayName, out int validatedWidth, out int validatedHeight)
+    {
             selected = selected.Trim().Trim('"');
             if (string.IsNullOrWhiteSpace(selected)) throw new InvalidOperationException("请先粘贴图片的完整路径");
             var info = new FileInfo(selected);
@@ -2019,8 +2066,8 @@ public static partial class TrainerBehaviour
             if (extension is not (".png" or ".jpg" or ".jpeg")) throw new InvalidOperationException("只支持 PNG、JPG、JPEG 图片");
             var bytes = File.ReadAllBytes(info.FullName);
             var validationTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            var validatedWidth = 0;
-            var validatedHeight = 0;
+            validatedWidth = 0;
+            validatedHeight = 0;
             try
             {
                 Il2CppStructArray<byte> nativeBytes = bytes;
@@ -2038,17 +2085,8 @@ public static partial class TrainerBehaviour
             if (!File.Exists(destination)) File.Copy(info.FullName, destination, false);
             IconRetryAt.Remove(fileName); // Explicit import always retries a previous failure.
             if (GetCustomKungfuIconSprite(fileName) == null) throw new InvalidOperationException(IconLoadErrors.TryGetValue(fileName, out var reason) ? reason : "无法生成预览；请查看 BepInEx/LogOutput.log");
-            _customDraft.CustomIconFile = fileName;
-            if (_customBattlePreviewActive) SetRuntimeCustomKungfuIconFile(_customBattlePreviewSkillId, fileName);
-            _customStatus = $"已导入本地图标：{info.Name}（{validatedWidth}×{validatedHeight}）；保存功法后永久生效。";
-            InvalidateCustomKungfuPages();
-            ShowCustomKungfuTab();
-        }
-        catch (Exception ex)
-        {
-            _customStatus = "本地图标导入失败：" + ex.Message;
-            LongYinTrainerPlugin.Logger.LogWarning($"Custom kungfu icon import failed: path={selected}, exception={ex}");
-        }
+            displayName = info.Name;
+            return fileName;
     }
 
     private static string? ShowCustomKungfuIconFilePicker()
@@ -2261,6 +2299,13 @@ public static partial class TrainerBehaviour
             var grid = controller.buildingButtonGrid;
             if (grid == null) return;
             var buttons = grid.GetComponentsInChildren<BuildingButtonController>(true);
+            if (NativeKungfuEditor.Enabled && !System.Linq.Enumerable.Any(buttons, b => b?.areaBuildingChoice?.callFuc == "CustomSkillEntry"))
+                controller.CreateBuildingButton(new AreaBuildingChoice {
+                    text = "自创武学", describe = "选择基础功法，进入游戏原生自创武学编辑器。",
+                    callFuc = "CustomSkillEntry", callFucParam = "", justNeedOneCondition = true,
+                    mainCondition = new Il2CppSystem.Collections.Generic.List<string>(),
+                    subCondition = new Il2CppSystem.Collections.Generic.List<string>()
+                });
             for (var i = 0; i < buttons.Length; i++)
                 if (IsCustomKungfuBuildingChoice(buttons[i]?.areaBuildingChoice)) return;
 
@@ -4434,11 +4479,31 @@ public static partial class TrainerBehaviour
         }
     }
 
+    private static KungfuSkillData? _nativeVisualPreviewSkill;
+    internal static string PlayNativeVisualPreview(KungfuSkillData skill, Transform parent)
+    {
+        StopNativeVisualPreview();
+        _nativeVisualPreviewSkill = skill;
+        _customAnimationPreviewParent = parent;
+        try { PlayCustomKungfuAnimationPreview(); return _customStatus; }
+        finally { _nativeVisualPreviewSkill = null; }
+    }
+    internal static void StopNativeVisualPreview()
+    {
+        if (_customAnimationPreviewGraphic != null) UnityEngine.Object.Destroy(_customAnimationPreviewGraphic.gameObject);
+        _customAnimationPreviewGraphic = null; _customAnimationPreviewAssetPointer = IntPtr.Zero;
+    }
+    internal static string NativeVisualDetails(KungfuSkillData skill)
+    {
+        var text = CustomKungfuDonorPreviewDetail(skill, "visual", true);
+        var last = text.IndexOf("右侧可用独立骨骼", StringComparison.Ordinal);
+        return last < 0 ? text : text.Substring(0, last);
+    }
     private static void PlayCustomKungfuAnimationPreview()
     {
         try
         {
-            var skill = CustomDonorSkill(_customPickerPreviewSkillId);
+            var skill = _nativeVisualPreviewSkill ?? CustomDonorSkill(_customPickerPreviewSkillId);
             if (skill == null || string.IsNullOrWhiteSpace(skill.animationName))
             {
                 _customStatus = "该来源没有可播放的使用动作。";
@@ -4452,8 +4517,34 @@ public static partial class TrainerBehaviour
 
             SkeletonDataAsset? asset = null;
             Material? material = null;
+            if (_nativeVisualPreviewSkill != null)
+            {
+                // Verified resource keys from the game's ResourceManager; no scene object required.
+                foreach (var path in new[] { "skeleton/spehero/1/skeleton_skeletondata", "skeleton/hero/0/skeleton_skeletondata", "skeleton/hero/1/skeleton_skeletondata" })
+                {
+                    var candidate = Resources.Load(path, Il2CppType.Of<SkeletonDataAsset>())?.TryCast<SkeletonDataAsset>();
+                    var data = candidate?.GetSkeletonData(false);
+                    if (data?.FindAnimation(skill.animationName) == null) continue;
+                    asset = candidate;
+                    var skin = data.DefaultSkin?.Name;
+                    if (string.IsNullOrEmpty(skin) && data.Skins.Count > 0) skin = data.Skins.Items[0].Name;
+                    _customAnimationPreviewGraphic = GlobalData.GenerateSkeletonGraphic(_customAnimationPreviewParent.gameObject, candidate, Vector3.one, skill.animationName, false, skin ?? "");
+                    _customAnimationPreviewAssetPointer = candidate!.Pointer;
+                    _customAnimationPreviewGraphic.raycastTarget = false;
+                    _customAnimationPreviewGraphic.MatchRectTransformWithBounds();
+                    var previewRect = _customAnimationPreviewGraphic.GetComponent<RectTransform>();
+                    var size = previewRect.rect.size;
+                    var scale = Math.Min(180f / Math.Max(1f, size.x), 230f / Math.Max(1f, size.y));
+                    previewRect.anchorMin = previewRect.anchorMax = new Vector2(.5f, .5f);
+                    previewRect.pivot = new Vector2(.5f, .5f); previewRect.anchoredPosition = Vector2.zero;
+                    previewRect.localScale = new Vector3(scale, scale, 1);
+                    LongYinTrainerPlugin.Logger.LogInfo("Native preview loaded independent skeleton: " + path + "; animation=" + skill.animationName);
+                    break;
+                }
+                if (asset == null) { _customStatus = "预览人物资源中没有动作：" + skill.animationName; return; }
+            }
             var sourceGraphic = UnityEngine.Object.FindObjectOfType(Il2CppType.Of<SkeletonGraphic>()) as SkeletonGraphic;
-            if (sourceGraphic != null && sourceGraphic != _customAnimationPreviewGraphic)
+            if (asset == null && sourceGraphic != null && sourceGraphic != _customAnimationPreviewGraphic)
             {
                 asset = sourceGraphic.SkeletonDataAsset;
                 material = sourceGraphic.material;
@@ -7615,4 +7706,3 @@ public static partial class TrainerBehaviour
     }
     private static int ParseInt(string value) => int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
 }
-
