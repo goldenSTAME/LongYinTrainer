@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.27")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.28")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -5349,13 +5349,14 @@ public static partial class TrainerBehaviour
         fields[key] = AddInput(parent, value, new Vector2(x + 125, y), new Vector2(180, 32));
     }
 
-    private static void AddNativeToggle(Transform parent, string label, float x, float y, Func<bool> get, Action<bool> set)
+    private static void AddNativeToggle(Transform parent, string label, float x, float y, Func<bool> get, Action<bool> set, float width = 480)
     {
-        var row = UiObject("Toggle_" + label, parent, new Vector2(480, 38), new Vector2(x, y));
+        var height = width < 480 ? 34 : 38;
+        var row = UiObject("Toggle_" + label, parent, new Vector2(width, height), new Vector2(x, y));
         var rowImage = row.AddComponent<Image>();
         ApplySprite(rowImage, _paperSprite, true, new Color(1f, 1f, 1f, 0.72f), new Color(0.84f, 0.81f, 0.72f, 0.92f));
-        var labelText = AddText(row.transform, label, new Vector2(14, 0), new Vector2(405, 38), 17, TextAnchor.MiddleLeft);
-        var box = UiObject("CheckBox", row.transform, new Vector2(28, 28), new Vector2(438, 5));
+        var labelText = AddText(row.transform, label, new Vector2(14, 0), new Vector2(width - 75, height), 17, TextAnchor.MiddleLeft);
+        var box = UiObject("CheckBox", row.transform, new Vector2(28, 28), new Vector2(width - 42, (height - 28) / 2));
         var boxImage = box.AddComponent<Image>();
         ApplySprite(boxImage, _inputSprite, true, Color.white, new Color(0.96f, 0.94f, 0.86f, 1f));
         var check = UiObject("Checkmark", box.transform, new Vector2(22, 22), new Vector2(3, 3));
@@ -5568,6 +5569,7 @@ public static partial class TrainerBehaviour
         var p = NativePageParent;
         if (hero == null) { AddText(p, "请先载入存档。", Vector2.zero, new Vector2(600, 40)); return; }
         AddText(p, $"当前角色：{hero.heroName}（ID {hero.heroID}）", Vector2.zero, new Vector2(800, 34), 20);
+        if (BuildCharacterEditor(hero)) return;
         var inputs = new Dictionary<string, InputField>();
         for (var i = 0; i < HeroKeys.Length; i++)
         {
@@ -5584,15 +5586,11 @@ public static partial class TrainerBehaviour
             _heroSearchText = heroSearch.text.Trim();
             SelectHeroBySearch(_heroSearchText);
         });
-        var attr = AddInput(p, _allAttr, new Vector2(125, 440), new Vector2(100, 34));
-        AddText(p, "六维属性", new Vector2(0, 440), new Vector2(120, 34));
-        AddButton(p, "设置基础值＋上限", new Vector2(235, 440), new Vector2(170, 34), () => { _allAttr = attr.text; SetAll(hero.baseAttri, hero.maxAttri, _allAttr); });
-        var fight = AddInput(p, _allFight, new Vector2(125, 485), new Vector2(100, 34));
-        AddText(p, "全部战斗技能", new Vector2(0, 485), new Vector2(120, 34));
-        AddButton(p, "设置基础值＋上限", new Vector2(235, 485), new Vector2(170, 34), () => { _allFight = fight.text; SetAll(hero.baseFightSkill, hero.maxFightSkill, _allFight); });
-        var living = AddInput(p, _allLiving, new Vector2(125, 530), new Vector2(100, 34));
-        AddText(p, "全部生活技能", new Vector2(0, 530), new Vector2(120, 34));
-        AddButton(p, "设置基础值＋上限", new Vector2(235, 530), new Vector2(170, 34), () => { _allLiving = living.text; SetAll(hero.baseLivingSkill, hero.maxLivingSkill, _allLiving); });
+        AddButton(p, "六维属性 · 展开编辑", new Vector2(0, 440), new Vector2(405, 34), () => OpenCharacterEditor(hero, 1));
+        AddButton(p, "武学 · 展开编辑", new Vector2(0, 485), new Vector2(405, 34), () => OpenCharacterEditor(hero, 2));
+        AddButton(p, "技艺 · 展开编辑", new Vector2(0, 530), new Vector2(405, 34), () => OpenCharacterEditor(hero, 3));
+        AddButton(p, "外观代码", new Vector2(0, 580), new Vector2(195, 38), () => OpenCharacterEditor(hero, 4));
+        AddButton(p, "专长与喜好", new Vector2(210, 580), new Vector2(195, 38), () => OpenCharacterEditor(hero, 5));
         AddText(p, "天赋槽位上限", new Vector2(520, 440), new Vector2(150, 34));
         var talentSlots = AddInput(p, LongYinTrainerPlugin.PlayerTalentSlotLimit.Value.ToString(CultureInfo.InvariantCulture), new Vector2(675, 440), new Vector2(100, 34));
         AddButton(p, "应用槽位", new Vector2(785, 440), new Vector2(150, 34), () =>

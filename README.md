@@ -1,14 +1,14 @@
-﻿# 龙胤立志传 修改器
+# 龙胤立志传 修改器
 
-**新手推荐：[一键安装 EXE（修正版 0.4.31.27）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.27/LongYinTrainer-Setup-0.4.31.27.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。安装器内置约 33 MB 的官方加载器，安装阶段无需下载；首次启动生成接口仍可能联网。已有加载器会检查完整性。详见 [一键安装说明](docs/ONE-CLICK.md)。
+**新手推荐：[一键安装 EXE（修正版 0.4.31.28）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.28/LongYinTrainer-Setup-0.4.31.28.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。安装器内置约 33 MB 的官方加载器，安装阶段无需下载；首次启动生成接口仍可能联网。已有加载器会检查完整性。详见 [一键安装说明](docs/ONE-CLICK.md)。
 
-**下载：[0.4.31.27 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.27/LongYinTrainer-0.4.31.27.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.27/LongYinTrainer-0.4.31.27.zip.sha256)**
+**下载：[0.4.31.28 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.28/LongYinTrainer-0.4.31.28.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.28/LongYinTrainer-0.4.31.28.zip.sha256)**
 
 > **体验提醒：这是较为暴力的修改器，会明显破坏游戏数值平衡，降低战斗难度，改变养成和探索节奏，影响原本的游戏体验。建议先体验原版，使用前备份存档，并按需开启功能。展示截图为修改后的效果，不代表原版或默认开启效果。**
 
 **界面与文档语言：简体中文（zh-CN）｜开发语言：C#｜平台：Windows x64**
 
-《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.31.27**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
+《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.31.28**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
 
 **进入存档后按 H 打开 / 收起面板。H 只控制面板显示，各功能需要单独开启或应用；收起面板不会关闭已开启的功能。**
 
@@ -16,6 +16,14 @@
 - [使用说明：快捷键、物品、资源锁定与突破自选](docs/USAGE.md)
 - [开发者：编译、打包与发布教程](docs/BUILD.md)
 - [手动移除／恢复功法与误删恢复](docs/KUNGFU-REMOVAL.md)
+
+## 0.4.31.28：角色外观、分列属性与专长喜好（2026-11-14）
+
+- H → 角色数值：增加原生形象代码导入／导出，主角和所选 NPC 共用。
+- 六维、武学、技艺可以展开逐项编辑基础值与上限；支持分列批量填入、单独应用，不再强制一起修改。
+- 新增专长与喜好多选列表，支持添加、移除与喜好翻页。
+- 覆盖安装仍写入固定 DLL；新增按程序集身份识别改名旧副本，发现重复时在写入前拦截并列出路径，避免重复加载。
+- 19 项临时角色运行时检查、30 项安装器回归通过；目视排版和真实存档保存／重载仍待验证。详见 [角色编辑说明](docs/CHARACTER-EDITING.md) 与 [发布记录](docs/RELEASE-0.4.31.28.md)。
 
 ## 0.4.31.27：原生自创武学扩展与安装修复（2026-11-14）
 

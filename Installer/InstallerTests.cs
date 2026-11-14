@@ -19,6 +19,25 @@ class InstallerTests
         Check(File.ReadAllText(Path.Combine(dest,"mod.dll"))=="new","directly replace old mod");
         Check(!Directory.Exists(Path.Combine(dest,"ModBackups")),"no backup directory created");
         Check(File.ReadAllText(Path.Combine(dest,"config.txt"))=="keep","preserve unrelated configuration");
+        InstallCore.Apply(src,dest);
+        Check(Directory.GetFiles(dest,"*.dll",SearchOption.AllDirectories).Length==1,"repeat install does not create another DLL");
+        if(args.Length > 1)
+        {
+            string pluginDir=Path.Combine(dest,"BepInEx/plugins"); Directory.CreateDirectory(pluginDir);
+            string canonical=Path.Combine(pluginDir,"LongYinTrainer.dll"); File.Copy(args[1],canonical);
+            InstallCore.ValidatePluginLayout(dest);
+            Check(true,"canonical plugin allows overwrite");
+            string alias=Path.Combine(pluginDir,"renamed-old-copy.dll"); File.Copy(args[1],alias);
+            Reject(()=>InstallCore.ValidatePluginLayout(dest),"reject renamed trainer by assembly identity");
+            File.Delete(alias);
+            string nested=Path.Combine(pluginDir,"old"); Directory.CreateDirectory(nested);
+            File.Copy(args[1],Path.Combine(nested,"LongYinTrainer.dll"));
+            Reject(()=>InstallCore.ValidatePluginLayout(dest),"reject nested trainer duplicate");
+            File.Delete(Path.Combine(nested,"LongYinTrainer.dll"));
+            File.Copy(typeof(InstallerTests).Assembly.Location,Path.Combine(pluginDir,"unrelated.dll"));
+            InstallCore.ValidatePluginLayout(dest);
+            Check(File.Exists(canonical),"unrelated assemblies are preserved");
+        }
         string fresh=Path.Combine(root,"fresh"); Directory.CreateDirectory(fresh); InstallCore.Apply(src,fresh);
         Check(File.Exists(Path.Combine(fresh,"mod.dll")),"fresh install");
         string zip=Path.Combine(root,"bad.zip"); using(var a=ZipFile.Open(zip,ZipArchiveMode.Create)) {using(var w=new StreamWriter(a.CreateEntry("../escape.txt").Open()))w.Write("bad");}
