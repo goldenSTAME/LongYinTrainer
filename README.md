@@ -1,14 +1,14 @@
 # 龙胤立志传 修改器
 
-**新手推荐：[一键安装 EXE（修正版 0.4.31.28）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.28/LongYinTrainer-Setup-0.4.31.28.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。安装器内置约 33 MB 的官方加载器，安装阶段无需下载；首次启动生成接口仍可能联网。已有加载器会检查完整性。详见 [一键安装说明](docs/ONE-CLICK.md)。
+**新手推荐：[一键安装 EXE（0.4.31.40）](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.40/LongYinTrainer-Setup-0.4.31.40.exe)**：退出游戏，把 EXE 放到游戏根目录双击，即可安装 BepInEx + Mod。安装器内置约 33 MB 的官方加载器，安装阶段无需下载；首次启动生成接口仍可能联网。已有加载器会检查完整性。详见 [一键安装说明](docs/ONE-CLICK.md)。
 
-**下载：[0.4.31.28 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.28/LongYinTrainer-0.4.31.28.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.28/LongYinTrainer-0.4.31.28.zip.sha256)**
+**下载：[0.4.31.40 安装包](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.40/LongYinTrainer-0.4.31.40.zip) · [SHA256 校验](https://github.com/goldenSTAME/LongYinTrainer/releases/download/v0.4.31.40/LongYinTrainer-0.4.31.40.zip.sha256)**
 
 > **体验提醒：这是较为暴力的修改器，会明显破坏游戏数值平衡，降低战斗难度，改变养成和探索节奏，影响原本的游戏体验。建议先体验原版，使用前备份存档，并按需开启功能。展示截图为修改后的效果，不代表原版或默认开启效果。**
 
 **界面与文档语言：简体中文（zh-CN）｜开发语言：C#｜平台：Windows x64**
 
-《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.31.28**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
+《龙胤立志传》的 BepInEx IL2CPP 修改器，源码版本 **0.4.31.40**。游戏内面板名为 **江湖札记**，插件文件为 `LongYinTrainer.dll`。
 
 **进入存档后按 H 打开 / 收起面板。H 只控制面板显示，各功能需要单独开启或应用；收起面板不会关闭已开启的功能。**
 
@@ -16,6 +16,12 @@
 - [使用说明：快捷键、物品、资源锁定与突破自选](docs/USAGE.md)
 - [开发者：编译、打包与发布教程](docs/BUILD.md)
 - [手动移除／恢复功法与误删恢复](docs/KUNGFU-REMOVAL.md)
+
+## 0.4.31.40 游戏界面与装备词条（2026-11-20）
+
+- 背包中点选装备后，打开「物品修改 → 装备／坐骑 → 全部」，按名称或 ID 查找词条。物品改名后会同步更新显示。
+- 原生自创武学支持按图标卡片选功法、直接选择加成档位，以及在选择范围前查看格子示意图。
+- [Steam 图文指南](https://steamcommunity.com/sharedfiles/filedetails/?id=3808278857) · [战斗辅助](docs/images/guide-battle.jpg) · [背包图鉴](docs/images/guide-catalog.jpg) · [功法图标选择](docs/images/guide-icons.jpg)
 
 ## 0.4.31.28：角色外观、分列属性与专长喜好（2026-11-14）
 
