@@ -23,7 +23,6 @@ public static partial class TrainerBehaviour
         var pageCount = 1;
         Text pageLabel=null!, title=null!, detail=null!, levelLabel=null!, rareLabel=null!, preview=null!;
         InputField quantity=null!, level=null!, rarity=null!;
-        Text help=null!;
         Action updateBookFilters = () => {};
 
         AddText(p, "物品图鉴", Vector2.zero, new Vector2(160,34),22);
@@ -52,7 +51,7 @@ public static partial class TrainerBehaviour
             });
             frames[i]=cards[i].GetComponent<Image>();
             var paper=UiObject("CardPaper",cards[i].transform,new Vector2(124,114),new Vector2(4,4));
-            var bg=paper.AddComponent<Image>(); bg.color=new Color(.97f,.95f,.87f,.98f); bg.raycastTarget=false;
+            var bg=paper.AddComponent<Image>(); bg.color=FieldPaper; bg.raycastTarget=false;
             icons[i]=UiObject("RuntimeIcon",paper.transform,new Vector2(82,82),new Vector2(21,3)).AddComponent<Image>();
             icons[i].preserveAspect=true; icons[i].raycastTarget=false;
             gems[i]=UiObject("Rarity",cards[i].transform,new Vector2(18,18),new Vector2(57,-7)).AddComponent<Image>();
@@ -74,8 +73,7 @@ public static partial class TrainerBehaviour
         preview=AddText(p,"",new Vector2(730,316),new Vector2(330,52),14);
         AddButton(p,"添加到主角背包",new Vector2(730,380),new Vector2(300,44),()=> { SaveInputs(); AddCatalogItem(_catalogSelected,_catalogQuantity,_catalogLevel,_catalogRarity); });
         AddText(p,"稀有度说明\n"+BuildRarityGuide(),new Vector2(730,438),new Vector2(330,160),15);
-        help = AddText(p,"目录包含隐藏功法。搜索名称或功法 ID；秘籍可按种类、品级筛选。\n分类、翻页和选择物品均复用现有控件。",new Vector2(0,520),new Vector2(690,56),15);
-        updateBookFilters = BuildBookCatalogFilters(p, UpdateGrid);
+        updateBookFilters = BuildBookCatalogFilters(p, UpdateGrid, editingItem: false);
         UpdateGrid(); UpdateDetails();
         LongYinTrainerPlugin.Logger.LogInfo("Catalog UI pool built: 12 reusable cards; runtime icons only.");
 
@@ -86,11 +84,10 @@ public static partial class TrainerBehaviour
         }
         void UpdateGrid() {
             updateBookFilters();
-            help.gameObject.SetActive(categories[Math.Clamp(_catalogCategory,0,categories.Count-1)] is not ("秘籍" or "药品" or "食物"));
             filtered=FilterCatalog(categories[Math.Clamp(_catalogCategory,0,categories.Count-1)],_catalogSearch);
             pageCount=Math.Max(1,(filtered.Count+11)/12); _catalogPage=Math.Clamp(_catalogPage,0,pageCount-1);
             for(var i=0;i<categories.Count;i++) {
-                categoryButtons[i].GetComponent<Image>().color=i==_catalogCategory ? new Color(.70f,.43f,.08f,1f) : new Color(.095f,.08f,.065f,.98f);
+                StyleNavigation(categoryButtons[i], i == _catalogCategory);
             }
             var shown=0; var found=0;
             for(var i=0;i<12;i++) {

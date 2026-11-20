@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.29")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.40")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -1051,6 +1051,7 @@ public static partial class TrainerBehaviour
     private static string _customBasicChoiceField = "";
     private static int _customBasicChoicePage;
     private static bool _customVisible;
+    private static readonly Button[] CustomTabs = new Button[5];
     private static int _customTab;
     private static int _customManagePage;
     private static int _customPickerPage;
@@ -1207,6 +1208,8 @@ public static partial class TrainerBehaviour
     private static string _affixType = "maxHp";
     private static string _affixValue = "100";
     private static int _affixPresetGroup;
+    private static string _affixCatalogQuery = "";
+    private static int _affixCatalogPage;
     private static bool _showItemAffixes;
     private static int _baseAffixPage;
     private static int _extraAffixPage;
@@ -2511,7 +2514,7 @@ public static partial class TrainerBehaviour
             _baseAffixPage = 0;
             _extraAffixPage = 0;
             _showItemAffixes = false;
-            _itemName = item.name ?? "";
+            _itemName = item.Name(false);
             _itemValue = item.value.ToString(CultureInfo.InvariantCulture);
             _itemLevel = item.itemLv.ToString(CultureInfo.InvariantCulture);
             _itemRare = item.rareLv.ToString(CultureInfo.InvariantCulture);
@@ -2553,7 +2556,7 @@ public static partial class TrainerBehaviour
         }
         catch { _selectedItemIndex = listHint; }
         if (_selectedItemIndex < 0) _selectedItemIndex = listHint;
-        _itemName = item.name ?? "";
+        _itemName = item.Name(false);
         _itemValue = item.value.ToString(CultureInfo.InvariantCulture);
         _itemLevel = item.itemLv.ToString(CultureInfo.InvariantCulture);
         _itemRare = item.rareLv.ToString(CultureInfo.InvariantCulture);
@@ -2798,32 +2801,26 @@ public static partial class TrainerBehaviour
             var scaler = _customUiRoot.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
             var shade = UiObject("Shade", _customUiRoot.transform, new Vector2(1920, 1080), Vector2.zero);
             var shadeImage = shade.AddComponent<Image>();
             shadeImage.color = new Color(0f, 0f, 0f, 0.72f);
 
             var panel = UiObject("CustomKungfuPanel", _customUiRoot.transform, new Vector2(1320, 900), new Vector2(300, 70));
-            var panelImage = panel.AddComponent<Image>();
-            ApplySprite(panelImage, _paperSprite, true, new Color(1f, 1f, 1f, 0.99f), new Color(0.93f, 0.90f, 0.80f, 0.995f));
-            var frame = UiObject("Frame", panel.transform, new Vector2(1320, 900), Vector2.zero);
-            var frameImage = frame.AddComponent<Image>();
-            ApplySprite(frameImage, _frameSprite, true, new Color(0.18f, 0.15f, 0.11f, 0.88f), new Color(0.18f, 0.15f, 0.11f, 0.25f));
-            frameImage.raycastTarget = false;
-
+            panel.AddComponent<Image>().color = PanelPaper;
             var title = UiObject("Title", panel.transform, new Vector2(1280, 44), new Vector2(20, 14));
             var titleImage = title.AddComponent<Image>();
-            ApplySprite(titleImage, _tabSprite ?? _buttonSprite, true, Color.white, new Color(0.075f, 0.065f, 0.055f, 0.99f));
+            titleImage.color = DeepInk;
             var titleText = AddText(title.transform, "藏经阁 · 自创功法", new Vector2(18, 0), new Vector2(780, 44), 23, TextAnchor.MiddleLeft);
-            titleText.color = new Color(0.94f, 0.69f, 0.18f, 1f);
+            titleText.color = LightText;
             AddCustomKungfuButton(title.transform, "关闭  Esc", new Vector2(1090, 4), new Vector2(170, 36), CloseCustomKungfuEditor, true);
 
             var tabs = new[] { "基本参数", "修炼／效果", "范围／姿态", "动作／特效", "保存／管理" };
             for (var i = 0; i < tabs.Length; i++)
             {
                 var captured = i;
-                AddCustomKungfuButton(panel.transform, tabs[i], new Vector2(20 + i * 258, 68), new Vector2(248, 42), () =>
+                CustomTabs[i] = AddCustomKungfuButton(panel.transform, tabs[i], new Vector2(20 + i * 258, 68), new Vector2(248, 42), () =>
                 {
                     SyncCustomKungfuDraftFromInputs();
                     UpdateCustomKungfuBasicSummary();
@@ -2841,9 +2838,9 @@ public static partial class TrainerBehaviour
 
             var status = UiObject("Status", panel.transform, new Vector2(1280, 48), new Vector2(20, 834));
             var statusImage = status.AddComponent<Image>();
-            ApplySprite(statusImage, _tabSprite ?? _buttonSprite, true, Color.white, new Color(0.13f, 0.11f, 0.085f, 0.97f));
+            statusImage.color = FieldPaper;
             _customUiStatus = AddText(status.transform, _customStatus, new Vector2(14, 0), new Vector2(1250, 48), 16, TextAnchor.MiddleLeft);
-            _customUiStatus.color = new Color(0.93f, 0.78f, 0.40f, 1f);
+            _customUiStatus.color = DeepInk;
 
             ShowCustomKungfuTab();
             _customUiRoot.SetActive(_customVisible);
@@ -2868,11 +2865,12 @@ public static partial class TrainerBehaviour
     {
         var go = UiObject("CustomButton_" + label, parent, size, pos);
         var image = go.AddComponent<Image>();
-        ApplySprite(image, _buttonSprite, true, Color.white, new Color(0.15f, 0.13f, 0.105f, 0.98f));
+        image.color = ButtonSurface(label);
         var button = go.AddComponent<Button>();
         button.targetGraphic = image;
         var text = AddText(go.transform, label, Vector2.zero, size, 17, TextAnchor.MiddleCenter);
-        text.color = new Color(0.96f, 0.92f, 0.80f, 1f);
+        FitButtonLabel(text);
+        text.color = LightText;
         (permanent ? CustomPermanentClicks : CustomBuildClicks).Add(new UiClick { Rect = go.GetComponent<RectTransform>(), Action = action });
         return button;
     }
@@ -2902,6 +2900,8 @@ public static partial class TrainerBehaviour
 
     private static void ShowCustomKungfuTab()
     {
+        for (var i = 0; i < CustomTabs.Length; i++)
+            if (CustomTabs[i] != null) StyleNavigation(CustomTabs[i], i == _customTab);
         if (_customUiContent == null || _customDraft == null) return;
         var key = "tab:" + _customTab;
         ActivateCustomKungfuPage(key, _customTab switch
@@ -3604,7 +3604,7 @@ public static partial class TrainerBehaviour
         return text.ToString();
     }
 
-    private static bool RangeShapeContains(int type, int min, int max, int x, int y, bool damage)
+    internal static bool RangeShapeContains(int type, int min, int max, int x, int y, bool damage)
     {
         if (max < min) (min, max) = (max, min);
         var ax = Math.Abs(x);
@@ -5043,57 +5043,34 @@ public static partial class TrainerBehaviour
             var scaler = _uiRoot.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
-            var panel = UiObject("Panel", _uiRoot.transform, new Vector2(1120, 820), new Vector2(42, 32));
+            var panel = UiObject("Panel", _uiRoot.transform, new Vector2(1250, 800), new Vector2(32, 28));
             _uiPanelRect = panel.GetComponent<RectTransform>();
-            var panelImage = panel.AddComponent<Image>();
-            ApplySprite(panelImage, _paperSprite, true, new Color(1f, 1f, 1f, 0.985f), new Color(0.93f, 0.90f, 0.80f, 0.985f));
-
-            var border = UiObject("NativeFrame", panel.transform, new Vector2(1120, 820), Vector2.zero);
-            var borderImage = border.AddComponent<Image>();
-            ApplySprite(borderImage, _frameSprite, true, new Color(0.19f, 0.17f, 0.13f, 0.82f), new Color(0.19f, 0.17f, 0.13f, 0.25f));
-            borderImage.raycastTarget = false;
-
-            if (_inkSprite != null)
-            {
-                var ink = UiObject("InkDecoration", panel.transform, new Vector2(180, 120), new Vector2(10, 686));
-                var inkImage = ink.AddComponent<Image>();
-                inkImage.sprite = _inkSprite;
-                inkImage.color = new Color(0.08f, 0.07f, 0.055f, 0.16f);
-                inkImage.preserveAspect = true;
-                inkImage.raycastTarget = false;
-            }
-
-            var titleBar = UiObject("TitleBar", panel.transform, new Vector2(1080, 36), new Vector2(18, 10));
+            panel.AddComponent<Image>().color = PanelPaper;
+            var rail = UiObject("Navigation", panel.transform, new Vector2(146, 800), Vector2.zero);
+            rail.AddComponent<Image>().color = DeepInk;
+            var titleBar = UiObject("TitleBar", panel.transform, new Vector2(1250, 52), Vector2.zero);
             _uiTitleRect = titleBar.GetComponent<RectTransform>();
-            var titleImage = titleBar.AddComponent<Image>();
-            ApplySprite(titleImage, _tabSprite ?? _buttonSprite, true, Color.white, new Color(0.075f, 0.065f, 0.055f, 0.98f));
-            var titleText = AddText(titleBar.transform, "江湖札记", new Vector2(16, 0), new Vector2(400, 36), 22, TextAnchor.MiddleLeft);
-            titleText.color = new Color(0.93f, 0.67f, 0.16f, 1f);
-            var closeText = AddText(titleBar.transform, "H  收起", new Vector2(910, 0), new Vector2(140, 36), 16, TextAnchor.MiddleRight);
-            closeText.color = new Color(0.88f, 0.82f, 0.68f, 1f);
+            titleBar.AddComponent<Image>().color = DeepInk;
+            var titleText = AddText(titleBar.transform, "江湖札记", new Vector2(18, 0), new Vector2(220, 52), 24);
+            titleText.color = LightText;
+            var closeText = AddText(titleBar.transform, "H  收起", new Vector2(1090, 0), new Vector2(140, 52), 16, TextAnchor.MiddleRight);
+            closeText.color = LightText;
 
             var tabNames = new[] { "战斗辅助", "角色数值", "背包物品", "物品修改", "打造／炼丹", "势力／开局", "更多功能", "突破自选", "城市属性", "奇遇生成" };
-            var tabGap = 3f;
-            var tabWidth = (1080f - tabGap * (tabNames.Length - 1)) / tabNames.Length;
             for (var i = 0; i < tabNames.Length; i++)
             {
                 var captured = i;
-                TabButtons.Add(AddButton(panel.transform, tabNames[i], new Vector2(18 + i * (tabWidth + tabGap), 50), new Vector2(tabWidth, 42), () => SelectNativeTab(captured), true));
+                var tab = AddButton(rail.transform, tabNames[i], new Vector2(8, 66 + i * 52), new Vector2(130, 44), () => SelectNativeTab(captured), true);
+                TabButtons.Add(tab);
             }
 
-            var content = UiObject("Content", panel.transform, new Vector2(1080, 654), new Vector2(18, 100));
+            var content = UiObject("Content", panel.transform, new Vector2(1080, 654), new Vector2(158, 68));
             _uiContent = content.GetComponent<RectTransform>();
-            var contentWash = content.AddComponent<Image>();
-            ApplySprite(contentWash, _paperSprite, true, new Color(1f, 1f, 1f, 0.42f), Color.clear);
-            contentWash.raycastTarget = false;
-
-            var statusBar = UiObject("StatusBar", panel.transform, new Vector2(1080, 38), new Vector2(18, 764));
-            var statusImage = statusBar.AddComponent<Image>();
-            ApplySprite(statusImage, _tabSprite ?? _buttonSprite, true, Color.white, new Color(0.13f, 0.11f, 0.085f, 0.96f));
-            _uiStatus = AddText(statusBar.transform, _status, new Vector2(12, 0), new Vector2(1056, 36), 17, TextAnchor.MiddleLeft);
-            _uiStatus.color = new Color(0.92f, 0.77f, 0.38f, 1f);
+            var statusBar = UiObject("StatusBar", panel.transform, new Vector2(1080, 46), new Vector2(158, 738));
+            statusBar.AddComponent<Image>().color = FieldPaper;
+            _uiStatus = AddText(statusBar.transform, _status, new Vector2(12, 2), new Vector2(1056, 42), 16);
             _pageDirty = true;
             _pageClearedForRebuild = false;
             _uiRoot.SetActive(_visible);
@@ -5216,6 +5193,44 @@ public static partial class TrainerBehaviour
         else image.color = fallbackColor;
     }
 
+    internal static readonly Color DeepInk = new Color32(32, 31, 29, 255);
+    internal static readonly Color ControlInk = new Color32(69, 65, 59, 255);
+    internal static readonly Color AccentInk = new Color32(111, 80, 39, 255);
+    internal static readonly Color PanelPaper = new Color32(237, 236, 231, 255);
+    internal static readonly Color FieldPaper = new Color32(250, 249, 245, 255);
+    internal static readonly Color LightText = new Color32(250, 247, 237, 255);
+
+    private static Color ButtonSurface(string label)
+    {
+        if (label.StartsWith("删除", StringComparison.Ordinal) || label.StartsWith("清空全部", StringComparison.Ordinal))
+            return new Color32(101, 58, 51, 255);
+        if (label.StartsWith("应用", StringComparison.Ordinal) || label.StartsWith("写入", StringComparison.Ordinal) ||
+            label.StartsWith("保存", StringComparison.Ordinal) || label.StartsWith("添加到", StringComparison.Ordinal))
+            return new Color32(85, 72, 55, 255);
+        return ControlInk;
+    }
+
+    private static void StylePaperChoice(Button button)
+    {
+        button.GetComponent<Image>().color = new Color32(222, 220, 211, 255);
+        button.GetComponentInChildren<Text>().color = DeepInk;
+    }
+
+    private static void FitButtonLabel(Text label)
+    {
+        label.resizeTextForBestFit = true;
+        label.resizeTextMinSize = 13;
+        label.resizeTextMaxSize = label.fontSize;
+    }
+
+    private static void StyleNavigation(Button button, bool current)
+    {
+        button.GetComponent<Image>().color = current ? AccentInk : DeepInk;
+        var label = button.GetComponentInChildren<Text>();
+        label.color = LightText;
+        label.fontStyle = current ? FontStyle.Bold : FontStyle.Normal;
+    }
+
     private static GameObject UiObject(string name, Transform parent, Vector2 size, Vector2 topLeft)
     {
         var go = new GameObject(name, Il2CppType.Of<RectTransform>());
@@ -5236,7 +5251,8 @@ public static partial class TrainerBehaviour
         text.font = _uiFont;
         text.fontSize = fontSize;
         text.text = value;
-        text.color = new Color(0.12f, 0.105f, 0.085f, 1f);
+        text.color = DeepInk;
+        if (fontSize >= 20) text.fontStyle = FontStyle.Bold;
         text.alignment = anchor;
         text.supportRichText = true;
         text.raycastTarget = false;
@@ -5247,14 +5263,14 @@ public static partial class TrainerBehaviour
     {
         var go = UiObject("Button_" + label, parent, size, pos);
         var image = go.AddComponent<Image>();
-        ApplySprite(image, _buttonSprite, true, Color.white, new Color(0.15f, 0.13f, 0.105f, 0.98f));
+        image.color = ButtonSurface(label);
         var button = go.AddComponent<Button>();
         button.targetGraphic = image;
         button.transition = Selectable.Transition.ColorTint;
         var colors = button.colors;
         colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1f, 0.86f, 0.48f, 1f);
-        colors.pressedColor = new Color(0.78f, 0.58f, 0.22f, 1f);
+        colors.highlightedColor = new Color(1f, .95f, .84f, 1f);
+        colors.pressedColor = new Color(.85f, .80f, .71f, 1f);
         colors.selectedColor = colors.highlightedColor;
         button.colors = colors;
         var semanticIcon = ButtonIcon(label);
@@ -5269,7 +5285,8 @@ public static partial class TrainerBehaviour
             if (label.Contains("下一页", StringComparison.Ordinal)) iconObject.GetComponent<RectTransform>().localScale = new Vector3(-1f, 1f, 1f);
         }
         var buttonText = AddText(go.transform, label, new Vector2(iconSpace, 0), new Vector2(size.x - iconSpace, size.y), 17, TextAnchor.MiddleCenter);
-        buttonText.color = new Color(0.96f, 0.92f, 0.80f, 1f);
+        FitButtonLabel(buttonText);
+        buttonText.color = LightText;
         (permanent ? TabClicks : PageClicks).Add(new UiClick { Rect = go.GetComponent<RectTransform>(), Action = action });
         return button;
     }
@@ -5335,9 +5352,14 @@ public static partial class TrainerBehaviour
     {
         var go = UiObject("Input", parent, size, pos);
         var image = go.AddComponent<Image>();
-        ApplySprite(image, _inputSprite, true, Color.white, new Color(0.985f, 0.97f, 0.90f, 1f));
+        image.color = FieldPaper;
+        var rule = UiObject("InputRule", go.transform, new Vector2(size.x, 2), new Vector2(0, size.y - 2));
+        var line = rule.AddComponent<Image>();
+        line.color = ControlInk;
+        line.raycastTarget = false;
         var field = go.AddComponent<InputField>();
         field.targetGraphic = image;
+        field.selectionColor = new Color(.65f, .49f, .25f, .35f);
         var text = AddText(go.transform, value, new Vector2(8, 0), new Vector2(size.x - 16, size.y), 17, TextAnchor.MiddleLeft);
         field.textComponent = text;
         field.text = value;
@@ -5355,20 +5377,15 @@ public static partial class TrainerBehaviour
         var height = width < 480 ? 34 : 38;
         var row = UiObject("Toggle_" + label, parent, new Vector2(width, height), new Vector2(x, y));
         var rowImage = row.AddComponent<Image>();
-        ApplySprite(rowImage, _paperSprite, true, new Color(1f, 1f, 1f, 0.72f), new Color(0.84f, 0.81f, 0.72f, 0.92f));
+        rowImage.color = FieldPaper;
         var labelText = AddText(row.transform, label, new Vector2(14, 0), new Vector2(width - 75, height), 17, TextAnchor.MiddleLeft);
-        var box = UiObject("CheckBox", row.transform, new Vector2(28, 28), new Vector2(width - 42, (height - 28) / 2));
-        var boxImage = box.AddComponent<Image>();
-        ApplySprite(boxImage, _inputSprite, true, Color.white, new Color(0.96f, 0.94f, 0.86f, 1f));
-        var check = UiObject("Checkmark", box.transform, new Vector2(22, 22), new Vector2(3, 3));
-        var checkImage = check.AddComponent<Image>();
-        ApplySprite(checkImage, _checkSprite, false, new Color(0.08f, 0.64f, 0.28f, 1f), new Color(0.08f, 0.64f, 0.28f, 1f));
-        checkImage.raycastTarget = false;
+        var state = AddText(row.transform, "", new Vector2(width - 72, 0), new Vector2(60, height), 15, TextAnchor.MiddleRight);
         void Refresh()
         {
             var enabled = get();
-            check.SetActive(enabled);
-            labelText.color = enabled ? new Color(0.54f, 0.10f, 0.07f, 1f) : new Color(0.12f, 0.105f, 0.085f, 1f);
+            state.text = enabled ? "已开启" : "已关闭";
+            state.color = enabled ? AccentInk : ControlInk;
+            labelText.fontStyle = enabled ? FontStyle.Bold : FontStyle.Normal;
         }
         PageClicks.Add(new UiClick { Rect = row.GetComponent<RectTransform>(), Action = () => { set(!get()); Refresh(); } });
         Refresh();
@@ -5468,17 +5485,7 @@ public static partial class TrainerBehaviour
     {
         if (_uiContent == null) return;
         for (var i = 0; i < TabButtons.Count; i++)
-        {
-            var image = TabButtons[i].GetComponent<Image>();
-            var text = TabButtons[i].GetComponentInChildren<Text>();
-            if (image != null)
-            {
-                var selected = i == _tab;
-                var sprite = selected ? (_tabSelectedSprite ?? _tabSprite ?? _buttonSprite) : (_tabSprite ?? _buttonSprite);
-                ApplySprite(image, sprite, true, Color.white, selected ? new Color(0.70f, 0.43f, 0.08f, 1f) : new Color(0.095f, 0.08f, 0.065f, 0.98f));
-            }
-            if (text != null) text.color = i == _tab ? new Color(1f, 0.88f, 0.48f, 1f) : new Color(0.94f, 0.90f, 0.80f, 1f);
-        }
+            StyleNavigation(TabButtons[i], i == _tab);
         foreach (var pair in PageRoots)
         {
             if (pair.Value != null) pair.Value.SetActive(pair.Key == _tab);
@@ -5683,8 +5690,7 @@ public static partial class TrainerBehaviour
             var button = AddButton(p, categories[i], new Vector2(0, 48 + i * 38), new Vector2(125, 32), () => { _catalogCategory = index; _catalogPage = 0; RequestPageRebuild(); });
             if (i == _catalogCategory)
             {
-                button.GetComponent<Image>().color = new Color(0.70f, 0.43f, 0.08f, 1f);
-                button.GetComponentInChildren<Text>().color = new Color(1f, 0.88f, 0.48f, 1f);
+                StyleNavigation(button, true);
             }
         }
 
@@ -5714,12 +5720,11 @@ public static partial class TrainerBehaviour
         AddText(p, $"第 {_catalogPage + 1} / {pageCount} 页　共 {filtered.Count} 项", new Vector2(270, 452), new Vector2(250, 34), 16, TextAnchor.MiddleCenter);
         AddButton(p, "下一页", new Vector2(530, 452), new Vector2(120, 34), () => { if (_catalogPage + 1 < pageCount) _catalogPage++; RequestPageRebuild(); });
 
-        BuildBookCatalogFilters(p, RequestPageRebuild)();
         var bagItem = ResolveSelectedItem();
+        BuildBookCatalogFilters(p, RequestPageRebuild, editingItem: bagItem != null)();
         if (bagItem != null)
         {
             BuildSelectedItemEditor(p, bagItem);
-            if (categories[_catalogCategory] != "秘籍") AddText(p, "提示：右侧正在编辑游戏背包中点击的现有物品。点击左侧任意图鉴卡片可切回物品生成。", new Vector2(0, 520), new Vector2(690, 56), 15);
             return;
         }
 
@@ -5763,14 +5768,13 @@ public static partial class TrainerBehaviour
         });
         AddText(p, "稀有度说明\n" + BuildRarityGuide(), new Vector2(730, 438), new Vector2(330, 160), 15);
 
-        if (categories[_catalogCategory] != "秘籍") AddText(p, "提示：这里展示的是生成图鉴，不会当作背包现有物品。编辑已有物品时，请在游戏背包中点击该物品，再进入“物品修改”。", new Vector2(0, 520), new Vector2(690, 56), 15);
     }
 
     private static void BuildSelectedItemEditor(Transform parent, ItemData item)
     {
         var editedPointer = item.Pointer;
         AddText(parent, "编辑背包物品", new Vector2(730, 48), new Vector2(330, 34), 21, TextAnchor.MiddleCenter);
-        AddText(parent, item.Name(false), new Vector2(730, 78), new Vector2(330, 32), 16, TextAnchor.MiddleCenter);
+        var displayName = AddText(parent, item.Name(false), new Vector2(730, 78), new Vector2(330, 32), 16, TextAnchor.MiddleCenter);
 
         AddText(parent, "名称", new Vector2(730, 116), new Vector2(70, 32));
         var name = AddInput(parent, _itemName, new Vector2(800, 116), new Vector2(260, 32));
@@ -5780,7 +5784,7 @@ public static partial class TrainerBehaviour
         var level = AddInput(parent, _itemLevel, new Vector2(800, 196), new Vector2(120, 32));
         AddText(parent, "稀有度", new Vector2(730, 236), new Vector2(70, 32));
         var rarity = AddInput(parent, _itemRare, new Vector2(800, 236), new Vector2(120, 32));
-        AddText(parent, RarityName(ParseIntSafe(_itemRare)), new Vector2(930, 236), new Vector2(130, 32), 14);
+        var rarityLabel = AddText(parent, RarityName(ParseIntSafe(_itemRare)), new Vector2(930, 236), new Vector2(130, 32), 14);
         AddText(parent, "重量", new Vector2(730, 276), new Vector2(70, 32));
         var weight = AddInput(parent, _itemWeight, new Vector2(800, 276), new Vector2(120, 32));
         AddText(parent, "毒量", new Vector2(730, 316), new Vector2(70, 32));
@@ -5797,6 +5801,9 @@ public static partial class TrainerBehaviour
             _itemWeight = weight.text;
             _itemPoison = poison.text;
             ApplyItem(current);
+            displayName.text = current.Name(false);
+            name.text = _itemName;
+            rarityLabel.text = RarityName(current.rareLv);
         });
         AddButton(parent, "返回图鉴生成", new Vector2(730, 410), new Vector2(330, 36), () =>
         {
@@ -5845,7 +5852,7 @@ public static partial class TrainerBehaviour
     private static Sprite? GetItemSprite(string iconName) => string.IsNullOrWhiteSpace(iconName) ? null
         : TryResolveUploadedIcon(iconName, out var uploaded) ? uploaded : GetRuntimeItemSprite(iconName);
 
-    private static Color RarityColor(int rareLv)
+    internal static Color RarityColor(int rareLv)
     {
         try
         {
@@ -6266,9 +6273,9 @@ public static partial class TrainerBehaviour
             BuildSelectedItemEditor(editor.transform, item);
             AddText(p, "修改的是背包中已选中的这一件物品。\n\n价值、等级和稀有度分别保存；更改等级或稀有度不会重新生成装备词条。\n\n修改后重新查看物品详情。", new Vector2(430, 110), new Vector2(610, 180), 18);
         }
-        AddButton(p, _showItemAffixes ? "物品数值" : "物品数值（当前）", new Vector2(0, 620), new Vector2(240, 32), () => { _showItemAffixes = false; RequestPageRebuild(); });
+        AddButton(p, _showItemAffixes ? "物品数值" : "物品数值（当前）", new Vector2(0, 620), new Vector2(240, 32), () => { if (_showItemAffixes) { _showItemAffixes = false; RequestPageRebuild(); } });
         if (supportsAffixes)
-            AddButton(p, _showItemAffixes ? "装备／坐骑（当前）" : "装备／坐骑", new Vector2(260, 620), new Vector2(240, 32), () => { _showItemAffixes = true; RequestPageRebuild(); });
+            AddButton(p, _showItemAffixes ? "装备／坐骑（当前）" : "装备／坐骑", new Vector2(260, 620), new Vector2(240, 32), () => { if (!_showItemAffixes) { _showItemAffixes = true; RequestPageRebuild(); } });
     }
 
     private static void BuildNativeAffix()
@@ -6288,7 +6295,7 @@ public static partial class TrainerBehaviour
         AddText(p, $"基础词条（{snapshot.Base.Count} 条）", new Vector2(0, 50), new Vector2(330, 34), 19, TextAnchor.MiddleCenter);
         AddText(p, $"额外词条（{snapshot.Extra.Count} 条，总计 {snapshot.Base.Count + snapshot.Extra.Count} 条）", new Vector2(350, 50), new Vector2(330, 34), 17, TextAnchor.MiddleCenter);
         AddText(p, "词条编辑器", new Vector2(720, 50), new Vector2(340, 34), 19, TextAnchor.MiddleCenter);
-        var selectedAffixName = AddText(p, "当前词条：请从左侧选择", new Vector2(720, 92), new Vector2(340, 34), 16, TextAnchor.MiddleCenter);
+        var selectedAffixName = AddText(p, $"当前词条：{EquipmentAffixName(_affixType)}", new Vector2(720, 92), new Vector2(340, 34), 16, TextAnchor.MiddleCenter);
         AddText(p, "数值", new Vector2(720, 136), new Vector2(100, 34));
         var value = AddInput(p, _affixValue, new Vector2(820, 136), new Vector2(240, 34));
 
@@ -6300,74 +6307,120 @@ public static partial class TrainerBehaviour
         AddButton(p, "删除基础中的该词条", new Vector2(720, 232), new Vector2(165, 36), () => { var current = ResolveSelectedItem(); if (current?.equipmentData == null) { _status = "原装备已变化，请重新选择。"; return; } RemoveAffix(false, _affixType, current); });
         AddButton(p, "删除额外中的该词条", new Vector2(895, 232), new Vector2(165, 36), () => { var current = ResolveSelectedItem(); if (current?.equipmentData == null) { _status = "原装备已变化，请重新选择。"; return; } RemoveAffix(true, _affixType, current); });
 
-        var groupNames = new[] { "常用", "六维", "武学", "战斗", "增益", "特殊", "生活" };
-        for (var i = 0; i < groupNames.Length; i++)
-        {
-            var groupIndex = i;
-            var groupButton = AddButton(p, groupNames[i], new Vector2(720 + i * 49, 282), new Vector2(45, 32), () =>
-            {
-                if (_affixPresetGroup == groupIndex) return;
-                _affixPresetGroup = groupIndex;
-                RequestPageRebuild();
-            });
-            if (i == _affixPresetGroup)
-            {
-                groupButton.GetComponent<Image>().color = new Color(0.70f, 0.43f, 0.08f, 1f);
-                groupButton.GetComponentInChildren<Text>().color = new Color(1f, 0.88f, 0.48f, 1f);
-            }
-        }
-
-        string[] presetNames;
-        string[] presetTypes;
-        switch (_affixPresetGroup)
-        {
-            case 1:
-                presetNames = new[] { "力道", "灵巧", "智力", "意志", "体质", "经脉", "力道上限", "灵巧上限", "智力上限", "意志上限", "体质上限", "经脉上限" };
-                presetTypes = new[] { "attri0", "attri1", "attri2", "attri3", "attri4", "attri5", "maxAttri0", "maxAttri1", "maxAttri2", "maxAttri3", "maxAttri4", "maxAttri5" };
-                break;
-            case 2:
-                presetNames = new[] { "内功", "轻功", "绝技", "拳掌", "剑法", "刀法", "长兵", "奇门", "射术", "内功威力", "轻功威力", "绝技威力", "拳掌威力", "剑法威力", "刀法威力", "长兵威力", "奇门威力", "射术威力" };
-                presetTypes = new[] { "fightSkill0", "fightSkill1", "fightSkill2", "fightSkill3", "fightSkill4", "fightSkill5", "fightSkill6", "fightSkill7", "fightSkill8", "fightSkillPower0", "fightSkillPower1", "fightSkillPower2", "fightSkillPower3", "fightSkillPower4", "fightSkillPower5", "fightSkillPower6", "fightSkillPower7", "fightSkillPower8" };
-                break;
-            case 3:
-                presetNames = new[] { "伤害", "护甲", "护甲率", "速度", "命中", "闪避", "暴击率", "抗暴率", "反击率", "抗反击", "连击率", "抗连击", "恢复效率", "减伤率", "伤势抵抗" };
-                presetTypes = new[] { "damage", "armor", "armorRate", "speed", "acc", "evade", "critRate", "antiCrit", "counter", "antiCounter", "comboRate", "antiCombo", "recoverRate", "reduceReciveDamageRate", "woundResist" };
-                break;
-            case 4:
-                presetNames = new[] { "伤害增加", "伤害降低", "护甲增加", "护甲降低", "速度增加", "速度降低", "命中增加", "命中降低", "闪避增加", "闪避降低", "暴击增加", "暴击降低", "连击增加", "连击降低", "负面抵抗" };
-                presetTypes = new[] { "addDamage", "reduceDamage", "addArmor", "reduceArmor", "addSpeed", "reduceSpeed", "addAcc", "reduceAcc", "addEvade", "reduceEvade", "addCrit", "reduceCrit", "addCombo", "reduceCombo", "addReduceDebuffRate" };
-                break;
-            case 5:
-                presetNames = new[] { "外伤伤害", "内伤伤害", "毒伤伤害", "吸取生命", "吸取内力", "削减内力", "真实伤害", "内伤真伤", "每回合回血", "每回合回蓝", "每回合体力", "内力护盾", "伤害反弹", "无敌", "复活" };
-                presetTypes = new[] { "externalDamage", "internalDamage", "poisonDamage", "suckHp", "suckMana", "killMana", "trueDamage", "internalTrueDamage", "recoverHpPerRound", "recoverManaPerRound", "recoverPowerPerRound", "manaShield", "reboundDamage", "invincible", "reborn" };
-                break;
-            case 6:
-                presetNames = new[] { "医术", "毒术", "学识", "口才", "采伐", "木植", "锻造", "炼药", "烹饪", "医术上限", "毒术上限", "学识上限", "口才上限", "采伐上限", "木植上限", "锻造上限", "炼药上限", "烹饪上限" };
-                presetTypes = new[] { "livingSkill0", "livingSkill1", "livingSkill2", "livingSkill3", "livingSkill4", "livingSkill5", "livingSkill6", "livingSkill7", "livingSkill8", "maxLivingSkill0", "maxLivingSkill1", "maxLivingSkill2", "maxLivingSkill3", "maxLivingSkill4", "maxLivingSkill5", "maxLivingSkill6", "maxLivingSkill7", "maxLivingSkill8" };
-                break;
-            default:
-                presetNames = new[] { "生命上限", "内力上限", "体力上限", "伤害", "护甲", "护甲率", "速度", "命中", "闪避", "暴击率", "反击率", "连击率", "移动范围", "恢复效率", "装备重量" };
-                presetTypes = new[] { "maxHp", "maxMana", "maxPower", "damage", "armor", "armorRate", "speed", "acc", "evade", "critRate", "counter", "comboRate", "moveRange", "recoverRate", "equipmentWeight" };
-                break;
-        }
-        for (var i = 0; i < presetNames.Length; i++)
-        {
-            var label = presetNames[i];
-            var typeName = presetTypes[i];
-            var col = i % 3;
-            var row = i / 3;
-            AddButton(p, label, new Vector2(720 + col * 116, 322 + row * 33), new Vector2(108, 28), () =>
-            {
-                _affixType = typeName;
-                _affixValue = IsPercentageAffix(typeName) ? "5" : "10";
-                value.text = _affixValue;
-                selectedAffixName.text = $"当前词条：{label}";
-                _status = $"已载入词条：{label}（{typeName}）{(IsPercentageAffix(typeName) ? "；输入框单位为百分比" : "")}";
-            });
-        }
+        BuildEquipmentAffixPicker(p, selectedAffixName, value);
         AddButton(p, "清空全部基础词条", new Vector2(0, 520), new Vector2(330, 38), () => { var current = ResolveSelectedItem(); if (current?.equipmentData == null) { _status = "原装备已变化，请重新选择。"; return; } current.equipmentData.baseAddData.Reset(); _baseAffixPage = 0; ItemChanged(current); _status = "基础词条已清空。"; RequestPageRebuild(); });
         AddButton(p, "清空全部额外词条", new Vector2(350, 520), new Vector2(330, 38), () => { var current = ResolveSelectedItem(); if (current?.equipmentData == null) { _status = "原装备已变化，请重新选择。"; return; } current.equipmentData.extraAddData.Reset(); _extraAffixPage = 0; ItemChanged(current); _status = "额外词条已清空。"; RequestPageRebuild(); });
         AddText(p, "提示：标有 % 的词条按百分数输入，输入 50 会保存为底层 0.5，并在游戏中显示 50%。速度与轻功技能是两个不同参数。", new Vector2(0, 578), new Vector2(1060, 42), 15);
+    }
+
+    private static void BuildEquipmentAffixPicker(Transform p, Text selectedName, InputField value)
+    {
+        var groups = new[] { "全部", "六维", "武学", "战斗", "增益", "特殊", "生活" };
+        var tabs = new Button[groups.Length];
+        var slots = new Button[18];
+        string[] presetNames = Array.Empty<string>();
+        string[] presetTypes = Array.Empty<string>();
+        var catalog = new List<(string Type, string Name)>();
+        var definitions = GameDataController.Instance?.speAddDataBase;
+        for (var id = 0; definitions != null && id < definitions.Count; id++)
+        {
+            var label = definitions[id]?.name;
+            if (!string.IsNullOrWhiteSpace(label)) catalog.Add((id.ToString(CultureInfo.InvariantCulture), label));
+        }
+
+        Action refresh = null!; // Click handlers run after all controls have been created.
+        var query = AddInput(p, _affixCatalogQuery, new Vector2(720, 322), new Vector2(208, 32));
+        var search = AddButton(p, "按名称或ID查找", new Vector2(934, 322), new Vector2(126, 32), () =>
+        {
+            _affixCatalogQuery = query.text.Trim();
+            _affixCatalogPage = 0;
+            refresh();
+        });
+        var previous = AddButton(p, "上一页", new Vector2(720, 532), new Vector2(78, 30), () => { _affixCatalogPage--; refresh(); });
+        var pageLabel = AddText(p, "", new Vector2(800, 532), new Vector2(180, 30), 15, TextAnchor.MiddleCenter);
+        var next = AddButton(p, "下一页", new Vector2(982, 532), new Vector2(78, 30), () => { _affixCatalogPage++; refresh(); });
+        for (var i = 0; i < groups.Length; i++)
+        {
+            var index = i;
+            tabs[i] = AddButton(p, groups[i], new Vector2(720 + i * 49, 282), new Vector2(45, 32), () =>
+            {
+                if (_affixPresetGroup == index) return;
+                _affixPresetGroup = index;
+                refresh();
+            });
+        }
+        for (var i = 0; i < slots.Length; i++)
+        {
+            var index = i;
+            slots[i] = AddButton(p, "", Vector2.zero, new Vector2(108, 28), () =>
+            {
+                _affixType = presetTypes[index];
+                var percent = IsPercentageAffix(_affixType);
+                value.text = _affixValue = percent ? "5" : "10";
+                selectedName.text = $"当前词条：{presetNames[index]}{(percent ? " (%)" : "")}";
+            });
+            StylePaperChoice(slots[i]);
+        }
+        refresh = Refresh;
+        refresh();
+
+        void Refresh()
+        {
+            var all = _affixPresetGroup == 0;
+            var pages = 1;
+            switch (_affixPresetGroup)
+            {
+                case 1:
+                    presetNames = new[] { "力道", "灵巧", "智力", "意志", "体质", "经脉", "力道上限", "灵巧上限", "智力上限", "意志上限", "体质上限", "经脉上限" };
+                    presetTypes = new[] { "attri0", "attri1", "attri2", "attri3", "attri4", "attri5", "maxAttri0", "maxAttri1", "maxAttri2", "maxAttri3", "maxAttri4", "maxAttri5" };
+                    break;
+                case 2:
+                    presetNames = new[] { "内功", "轻功", "绝技", "拳掌", "剑法", "刀法", "长兵", "奇门", "射术", "内功威力", "轻功威力", "绝技威力", "拳掌威力", "剑法威力", "刀法威力", "长兵威力", "奇门威力", "射术威力" };
+                    presetTypes = new[] { "fightSkill0", "fightSkill1", "fightSkill2", "fightSkill3", "fightSkill4", "fightSkill5", "fightSkill6", "fightSkill7", "fightSkill8", "fightSkillPower0", "fightSkillPower1", "fightSkillPower2", "fightSkillPower3", "fightSkillPower4", "fightSkillPower5", "fightSkillPower6", "fightSkillPower7", "fightSkillPower8" };
+                    break;
+                case 3:
+                    presetNames = new[] { "伤害", "护甲", "护甲率", "速度", "命中", "闪避", "暴击率", "抗暴率", "反击率", "抗反击", "连击率", "抗连击", "恢复效率", "减伤率", "伤势抵抗" };
+                    presetTypes = new[] { "damage", "armor", "armorRate", "speed", "acc", "evade", "critRate", "antiCrit", "counter", "antiCounter", "comboRate", "antiCombo", "recoverRate", "reduceReciveDamageRate", "woundResist" };
+                    break;
+                case 4:
+                    presetNames = new[] { "伤害增加", "伤害降低", "护甲增加", "护甲降低", "速度增加", "速度降低", "命中增加", "命中降低", "闪避增加", "闪避降低", "暴击增加", "暴击降低", "连击增加", "连击降低", "负面抵抗" };
+                    presetTypes = new[] { "addDamage", "reduceDamage", "addArmor", "reduceArmor", "addSpeed", "reduceSpeed", "addAcc", "reduceAcc", "addEvade", "reduceEvade", "addCrit", "reduceCrit", "addCombo", "reduceCombo", "addReduceDebuffRate" };
+                    break;
+                case 5:
+                    presetNames = new[] { "外伤伤害", "内伤伤害", "毒伤伤害", "吸取生命", "吸取内力", "削减内力", "真实伤害", "内伤真伤", "每回合回血", "每回合回蓝", "每回合体力", "内力护盾", "伤害反弹", "无敌", "复活" };
+                    presetTypes = new[] { "externalDamage", "internalDamage", "poisonDamage", "suckHp", "suckMana", "killMana", "trueDamage", "internalTrueDamage", "recoverHpPerRound", "recoverManaPerRound", "recoverPowerPerRound", "manaShield", "reboundDamage", "invincible", "reborn" };
+                    break;
+                case 6:
+                    presetNames = new[] { "医术", "毒术", "学识", "口才", "采伐", "木植", "锻造", "炼药", "烹饪", "医术上限", "毒术上限", "学识上限", "口才上限", "采伐上限", "木植上限", "锻造上限", "炼药上限", "烹饪上限" };
+                    presetTypes = new[] { "livingSkill0", "livingSkill1", "livingSkill2", "livingSkill3", "livingSkill4", "livingSkill5", "livingSkill6", "livingSkill7", "livingSkill8", "maxLivingSkill0", "maxLivingSkill1", "maxLivingSkill2", "maxLivingSkill3", "maxLivingSkill4", "maxLivingSkill5", "maxLivingSkill6", "maxLivingSkill7", "maxLivingSkill8" };
+                    break;
+                default:
+                    const int pageSize = 15;
+                    var matches = catalog.Where(entry => entry.Type == _affixCatalogQuery || entry.Name.Contains(_affixCatalogQuery, StringComparison.OrdinalIgnoreCase)).ToList();
+                    pages = Math.Max(1, (matches.Count + pageSize - 1) / pageSize);
+                    _affixCatalogPage = Math.Clamp(_affixCatalogPage, 0, pages - 1);
+                    var page = matches.Skip(_affixCatalogPage * pageSize).Take(pageSize).ToList();
+                    presetNames = page.Select(entry => entry.Name).ToArray();
+                    presetTypes = page.Select(entry => entry.Type).ToArray();
+                    pageLabel.text = $"{matches.Count} 项  {_affixCatalogPage + 1}/{pages} 页";
+                    break;
+            }
+            for (var i = 0; i < tabs.Length; i++)
+                StyleNavigation(tabs[i], i == _affixPresetGroup);
+            query.gameObject.SetActive(all);
+            search.gameObject.SetActive(all);
+            pageLabel.gameObject.SetActive(all);
+            previous.gameObject.SetActive(all && _affixCatalogPage > 0);
+            next.gameObject.SetActive(all && _affixCatalogPage + 1 < pages);
+            for (var i = 0; i < slots.Length; i++)
+            {
+                var visible = i < presetNames.Length;
+                slots[i].gameObject.SetActive(visible);
+                if (!visible) continue;
+                slots[i].GetComponentInChildren<Text>().text = presetNames[i];
+                slots[i].GetComponent<RectTransform>().anchoredPosition = new Vector2(720 + i % 3 * 116, -(all ? 362 : 322) - i / 3 * 33);
+            }
+        }
     }
 
     private static void BuildNativeHorseAffix(Transform p, ItemData selectedItem)
@@ -6457,20 +6510,29 @@ public static partial class TrainerBehaviour
         }
     }
 
+    private static string EquipmentAffixName(string type)
+    {
+        if (!Enum.TryParse<HeroSpeAddDataType>(type, true, out var parsed)) return type;
+        var name = FindSpeAddDefinition((int)parsed)?.name;
+        return string.IsNullOrWhiteSpace(name) ? DescribeAffixName((int)parsed) : name;
+    }
+
     private static void CopyAffixes(HeroSpeAddData data, List<AffixRowSnapshot> destination)
     {
         var keys = data.GetKeys();
         if (keys == null) return;
-        var count = Math.Min(keys.Count, 128);
+        var count = keys.Count;
         for (var i = 0; i < count; i++)
         {
             var key = keys[i];
             var amount = data.Get(key);
+            var percent = IsPercentageAffix(key);
+            var displayed = percent ? amount * 100f : amount;
             destination.Add(new AffixRowSnapshot
             {
                 Key = key,
                 Amount = amount,
-                Description = DescribeSingleAffix(key, amount)
+                Description = $"{EquipmentAffixName(key.ToString(CultureInfo.InvariantCulture))}{(displayed >= 0 ? "+" : "")}{displayed.ToString("0.###", CultureInfo.InvariantCulture)}{(percent ? "%" : "")}"
             });
         }
     }
@@ -6487,40 +6549,41 @@ public static partial class TrainerBehaviour
         var page = Math.Clamp(extra ? _extraAffixPage : _baseAffixPage, 0, pageCount - 1);
         if (extra) _extraAffixPage = page;
         else _baseAffixPage = page;
-        var start = page * pageSize;
-        var displayed = 0;
-        for (var i = start; i < rows.Count && i < start + pageSize; i++)
+        var buttons = new Button[Math.Min(pageSize, rows.Count)];
+        for (var i = 0; i < buttons.Length; i++)
         {
-            var key = rows[i].Key;
-            var amount = rows[i].Amount;
-            var description = rows[i].Description;
-            if (string.IsNullOrWhiteSpace(description)) description = $"未知词条 ID {key}{(amount >= 0 ? "+" : "")}{amount.ToString("0.###", CultureInfo.InvariantCulture)}";
-            AddButton(parent, description, new Vector2(x, y + displayed * 43), new Vector2(330, 36), () =>
+            var slot = i;
+            buttons[i] = AddButton(parent, "", new Vector2(x, y + i * 43), new Vector2(330, 36), () =>
             {
-                _affixType = key.ToString(CultureInfo.InvariantCulture);
-                _affixValue = (IsPercentageAffix(key) ? amount * 100f : amount).ToString("0.###", CultureInfo.InvariantCulture);
+                var row = rows[page * pageSize + slot];
+                _affixType = row.Key.ToString(CultureInfo.InvariantCulture);
+                _affixValue = (IsPercentageAffix(row.Key) ? row.Amount * 100f : row.Amount).ToString("0.###", CultureInfo.InvariantCulture);
                 value.text = _affixValue;
-                selectedAffixName.text = $"当前词条：{description}";
-                _status = $"已载入词条：{description}{(IsPercentageAffix(key) ? "；输入框单位为百分比" : "")}";
+                selectedAffixName.text = $"当前词条：{row.Description}";
             });
-            displayed++;
+            StylePaperChoice(buttons[i]);
         }
-        if (displayed == 0) AddText(parent, "（无可识别词条）", new Vector2(x, y), new Vector2(330, 36), 16, TextAnchor.MiddleCenter);
+        Text? pageLabel = null;
         if (pageCount > 1)
         {
-            AddButton(parent, "上一页", new Vector2(x, y + pageSize * 43), new Vector2(92, 30), () =>
+            AddButton(parent, "上一页", new Vector2(x, y + pageSize * 43), new Vector2(92, 30), () => Show(page - 1));
+            pageLabel = AddText(parent, "", new Vector2(x + 98, y + pageSize * 43), new Vector2(128, 30), 14, TextAnchor.MiddleCenter);
+            AddButton(parent, "下一页", new Vector2(x + 232, y + pageSize * 43), new Vector2(98, 30), () => Show(page + 1));
+        }
+        Show(page);
+
+        void Show(int requested)
+        {
+            page = Math.Clamp(requested, 0, pageCount - 1);
+            if (extra) _extraAffixPage = page;
+            else _baseAffixPage = page;
+            if (pageLabel != null) pageLabel.text = $"第 {page + 1}/{pageCount} 页";
+            for (var i = 0; i < buttons.Length; i++)
             {
-                if (extra) _extraAffixPage = Math.Max(0, _extraAffixPage - 1);
-                else _baseAffixPage = Math.Max(0, _baseAffixPage - 1);
-                RequestPageRebuild();
-            });
-            AddText(parent, $"第 {page + 1}/{pageCount} 页", new Vector2(x + 98, y + pageSize * 43), new Vector2(128, 30), 14, TextAnchor.MiddleCenter);
-            AddButton(parent, "下一页", new Vector2(x + 232, y + pageSize * 43), new Vector2(98, 30), () =>
-            {
-                if (extra) _extraAffixPage = Math.Min(pageCount - 1, _extraAffixPage + 1);
-                else _baseAffixPage = Math.Min(pageCount - 1, _baseAffixPage + 1);
-                RequestPageRebuild();
-            });
+                var index = page * pageSize + i;
+                buttons[i].gameObject.SetActive(index < rows.Count);
+                if (index < rows.Count) buttons[i].GetComponentInChildren<Text>().text = rows[index].Description;
+            }
         }
     }
 
@@ -6691,18 +6754,13 @@ public static partial class TrainerBehaviour
     private static bool IsPercentageAffix(int key)
     {
         if (AffixPercentCache.TryGetValue(key, out var cached)) return cached;
-        var result = false;
-        try
-        {
-            var definition = FindSpeAddDefinition(key);
-            if (definition != null && definition.showPercent) result = true;
-        }
-        catch { }
-        if (!result)
+        var definition = FindSpeAddDefinition(key);
+        if (definition == null)
         {
             var enumName = Enum.GetName(typeof(HeroSpeAddDataType), key);
-            result = !string.IsNullOrWhiteSpace(enumName) && IsPercentageAffixNameFallback(enumName);
+            return !string.IsNullOrWhiteSpace(enumName) && IsPercentageAffixNameFallback(enumName);
         }
+        var result = definition.showPercent;
         AffixPercentCache[key] = result;
         return result;
     }
@@ -7199,8 +7257,7 @@ public static partial class TrainerBehaviour
             });
             if (choiceId == _selectedBreakChoiceId)
             {
-                button.GetComponent<Image>().color = new Color(0.70f, 0.43f, 0.08f, 1f);
-                button.GetComponentInChildren<Text>().color = new Color(1f, 0.88f, 0.48f, 1f);
+                StyleNavigation(button, true);
             }
         }
 
@@ -7437,7 +7494,15 @@ public static partial class TrainerBehaviour
             var weight = ParseFloat(_itemWeight);
             var poison = ParseFloat(_itemPoison);
             if (!float.IsFinite(weight) || !float.IsFinite(poison)) throw new InvalidOperationException("重量和毒量必须是有限数字");
-            item.name = _itemName;
+            var oldName = item.Name(false);
+            var requestedName = _itemName.Trim();
+            if (requestedName != oldName)
+            {
+                item.setName = requestedName;
+                // In some language settings RawName gives checkName priority.
+                if (requestedName.Length > 0 && item.Name(false) != requestedName && oldName == item.checkName)
+                    item.checkName = requestedName;
+            }
             item.value = value;
             item.itemLv = level;
             item.rareLv = rarity;
@@ -7449,7 +7514,10 @@ public static partial class TrainerBehaviour
             _itemWeight = item.weight.ToString(CultureInfo.InvariantCulture);
             _itemPoison = item.poisonNum.ToString(CultureInfo.InvariantCulture);
             ItemChanged(item);
-            _status = $"物品数值已应用：等级 {level}，稀有度 {RarityName(rarity)}。";
+            _itemName = item.Name(false);
+            _status = requestedName.Length > 0 && requestedName != _itemName
+                ? $"数值已应用，游戏仍显示名称「{_itemName}」。"
+                : $"已应用「{_itemName}」：等级 {level}，稀有度 {RarityName(rarity)}。";
         }
         catch (Exception ex) { _status = "物品数值应用失败：" + ex.Message; }
     }

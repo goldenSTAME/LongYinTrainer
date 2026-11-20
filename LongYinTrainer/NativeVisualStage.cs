@@ -156,8 +156,7 @@ internal static class NativeVisualStage
     private static List<Vector3> RangeCells(int type, int min, int max, float unit, Vector3 center, bool damageRange = false)
     {
         var result = new List<Vector3>();
-        var controller = CustomSkillCreateController.Instance.externalDamageRangeUI.GetComponentInChildren<SkillRangeUIController>(true);
-        controller ??= CustomSkillCreateController.Instance.GetComponentInChildren<SkillRangeUIController>(true);
+        var controller = NativeKungfuFields.FindRangeController(CustomSkillCreateController.Instance);
         if (controller == null) return result;
         // Large ranges are sampled for preview only; the actual draft remains unchanged.
         var radius = Math.Clamp(max, 0, 8); var lines = radius * 2 + 1;

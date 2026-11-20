@@ -74,11 +74,18 @@ internal static class NativeKungfuFields
         Owner.chooseUI.SetActive(true);
         Owner.chooseUI.transform.SetAsLastSibling();
         SyncToolbar();
-        var heading = Button(title, () => { });
-        heading.GetComponent<Button>().interactable = false;
-        var hr = heading.GetComponent<RectTransform>();
-        hr.anchoredPosition = new Vector2(20, -6); hr.sizeDelta = new Vector2(650, 32);
-        Clicks.RemoveAt(Clicks.Count - 1); _slot = 0;
+        var heading = Object.Instantiate(Owner.chooseButtonPrefab.GetComponentInChildren<Text>(true), Fields);
+        heading.text = title;
+        heading.color = TrainerBehaviour.DeepInk;
+        heading.fontSize = 20;
+        heading.fontStyle = FontStyle.Bold;
+        heading.alignment = TextAnchor.MiddleLeft;
+        heading.raycastTarget = false;
+        var hr = heading.rectTransform;
+        hr.anchorMin = hr.anchorMax = hr.pivot = new Vector2(0, 1);
+        hr.localScale = Vector3.one;
+        hr.anchoredPosition = new Vector2(20, -6);
+        hr.sizeDelta = new Vector2(650, 34);
     }
     private static void RestoreLayout() {
         _customLayout = false;
@@ -110,7 +117,7 @@ internal static class NativeKungfuFields
         if (b == null) throw new InvalidOperationException("原生选项模板没有 Button");
         b.onClick = new Button.ButtonClickedEvent();
         var text = go.GetComponentInChildren<Text>(true);
-        if (text != null) text.text = label;
+        if (text != null) { text.text = label; text.color = TrainerBehaviour.DeepInk; }
         go.SetActive(true);
         Place(go, (_slot % 3) * 225, (_slot / 3) * 48, 210); _slot++;
         Clicks.Add(new Click(b.GetComponent<RectTransform>(), action));
@@ -258,9 +265,132 @@ internal static class NativeKungfuFields
         __instance.draftSkillData.manaCost = _mana.Value;
         __instance.manaCostText.text = "内力消耗 " + _mana.Value.ToString(C);
     }
+    // These fixed-distance thumbnails can be reused across drafts and range rows.
+    private static readonly Dictionary<(bool Damage, int Type), Texture2D> ShapeThumbnails = new();
+
+    internal static SkillRangeUIController? FindRangeController(CustomSkillCreateController owner)
+    {
+        var type = Il2CppInterop.Runtime.Il2CppType.Of<SkillRangeUIController>();
+        var component = owner.externalDamageRangeUI?.GetComponentInChildren(type, true)
+            ?? owner.gameObject.GetComponentInChildren(type, true);
+        return component?.TryCast<SkillRangeUIController>();
+    }
+
+    private static Texture2D? ShapeThumbnail(bool damage, int type)
+    {
+        if (ShapeThumbnails.TryGetValue((damage, type), out var cached) && cached != null) return cached;
+        var controller = FindRangeController(Owner);
+        const int side = 5, cell = 8;
+        var all = damage && type == (int)DamageRangeType.All;
+        var directional = damage && type >= (int)DamageRangeType.DirectionLine && !all;
+        var shape = directional && controller != null ? controller.GetDirectionDamageType((DamageRangeType)type) : type;
+        var grid = all ? null : controller?.FindRangeGrids(shape, side, 1, 2, directional);
+        if (grid != null && grid.Count != side) grid = null;
+        var width = side * cell + 1;
+        var pixels = new Color32[width * width];
+        Color32 border = new Color32(76, 66, 59, 255);
+        Color32 hit = damage ? new Color32(148, 40, 34, 255) : new Color32(117, 87, 42, 255);
+        Color32 paper = new Color32(237, 235, 228, 255);
+        Color32 origin = new Color32(130, 126, 119, 255);
+        Array.Fill(pixels, border);
+        for (var x = 0; x < side; x++)
+        {
+            var column = grid == null ? null : grid[x];
+            if (column != null && column.Count != side) column = null;
+            for (var y = 0; y < side; y++)
+            {
+                var covered = all || (column != null ? column[y] > 0 : TrainerBehaviour.RangeShapeContains(type, 1, 2, x - side / 2, y - side / 2, damage));
+                var color = covered ? hit : paper;
+                for (var j = 1; j < cell; j++)
+                    for (var i = 1; i < cell; i++)
+                    {
+                        var centerMark = x == side / 2 && y == side / 2 && (!covered || (i >= 3 && i <= 5 && j >= 3 && j <= 5));
+                        pixels[(y * cell + j) * width + x * cell + i] = centerMark ? origin : color;
+                    }
+            }
+        }
+        var texture = new Texture2D(width, width, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Point;
+        texture.hideFlags = HideFlags.HideAndDontSave;
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        ShapeThumbnails[(damage, type)] = texture;
+        return texture;
+    }
+
+    private static void ChooseValue(string title, IReadOnlyList<string> options, int selected, Action<int> apply, bool? damageShape = null)
+    {
+        // Keep the form alive, including uncommitted text and newly added range rows.
+        var previous = new List<GameObject>();
+        for (var i = 0; i < Fields.childCount; i++)
+        {
+            var child = Fields.GetChild(i).gameObject;
+            if (child.activeSelf) { previous.Add(child); child.SetActive(false); }
+        }
+        var firstControl = Fields.childCount;
+        var firstClick = Clicks.Count;
+        var savedSlot = _slot;
+        void Close()
+        {
+            Clicks.RemoveRange(firstClick, Clicks.Count - firstClick);
+            for (var i = Fields.childCount - 1; i >= firstControl; i--)
+            {
+                var child = Fields.GetChild(i).gameObject;
+                child.SetActive(false);
+                Object.Destroy(child);
+            }
+            _slot = savedSlot;
+            foreach (var child in previous) child.SetActive(true);
+        }
+        var heading = Object.Instantiate(Owner.chooseButtonPrefab.GetComponentInChildren<Text>(true), Fields);
+        heading.text = title;
+        heading.color = TrainerBehaviour.DeepInk;
+        heading.alignment = TextAnchor.MiddleLeft;
+        heading.raycastTarget = false;
+        var rect = heading.rectTransform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+        rect.localScale = Vector3.one;
+        rect.anchoredPosition = new Vector2(20, -6);
+        rect.sizeDelta = new Vector2(650, 34);
+        for (var i = 0; i < options.Count; i++)
+        {
+            var index = i;
+            var label = options[i] + (i == selected ? "（当前）" : "");
+            var button = Button(label, () => { Close(); if (index != selected) apply(index); });
+            if (!damageShape.HasValue)
+            {
+                Place(button, i % 3 * 220, 22 + i / 3 * 54, 210);
+                continue;
+            }
+            Place(button, i % 3 * 220, 8 + i / 3 * 96, 210);
+            button.GetComponent<RectTransform>().sizeDelta = new Vector2(210, 86);
+            Texture2D? thumbnail;
+            try { thumbnail = ShapeThumbnail(damageShape.Value, i); }
+            catch (Exception ex)
+            {
+                LongYinTrainerPlugin.Logger.LogWarning($"Range thumbnail {i} unavailable: {ex.Message}");
+                continue;
+            }
+            if (thumbnail == null) continue;
+            var preview = new GameObject("RangeThumbnail").AddComponent<RawImage>();
+            var r = preview.rectTransform;
+            r.SetParent(button.transform, false);
+            r.anchorMin = r.anchorMax = r.pivot = new Vector2(0, .5f);
+            r.sizeDelta = new Vector2(66, 66);
+            r.anchoredPosition = new Vector2(8, 0);
+            preview.texture = thumbnail;
+            preview.raycastTarget = false;
+            var caption = button.GetComponentInChildren<Text>(true);
+            caption.rectTransform.offsetMin = new Vector2(80, 2);
+            caption.text = options[i] + (i == selected ? "\n（当前）" : "");
+
+        }
+        FooterButton("取消", 3, Close);
+    }
+
     private static void Ratios()
     {
-        Begin("加成管理 · 左键升档，右键退档，未启用表示移除"); var d = Owner.draftSkillData;
+        Begin("加成管理 · 点击属性选择档位"); var d = Owner.draftSkillData;
         // Native indices: six attributes, nine combat, nine life skills, HP/power/mana/charm.
         for (var i = 0; i < 28; i++) {
             var index = i;
@@ -271,16 +401,19 @@ internal static class NativeKungfuFields
                 var grade = Math.Clamp(Mathf.RoundToInt(v / step), 0, GlobalData.AttriRatioString.Count - 1);
                 return CustomSkillDamageRatioController.GetRatioName(index) + " · " + (v <= 0 ? "未启用" : GlobalData.AttriRatioString[grade]);
             }
-            void Change(int direction) {
+            button = Button(Label(), () => {
+                var options = new List<string> { "未启用" };
+                for (var grade = 1; grade < GlobalData.AttriRatioString.Count; grade++)
+                    options.Add(GlobalData.AttriRatioString[grade]);
                 var old = CustomSkillDamageRatioController.GetRatioValue(d.addDamageRatio, index);
-                var count = GlobalData.AttriRatioString.Count;
-                var grade = (Mathf.RoundToInt(old / step) + direction + count) % count;
-                CustomSkillDamageRatioController.SetRatioValue(d.addDamageRatio, index, grade * step);
-                button!.GetComponentInChildren<Text>(true).text = Label();
-                RebuildRatios();
-            }
-            button = Button(Label(), () => Change(1));
-            Clicks[^1] = Clicks[^1] with { Right = () => Change(-1) };
+                var current = Mathf.RoundToInt(old / step);
+                if (!Mathf.Approximately(old, current * step)) current = -1;
+                ChooseValue(CustomSkillDamageRatioController.GetRatioName(index) + " · 选择加成档位", options, current, grade => {
+                    CustomSkillDamageRatioController.SetRatioValue(d.addDamageRatio, index, grade * step);
+                    button!.GetComponentInChildren<Text>(true).text = Label();
+                    RebuildRatios();
+                });
+            });
             Place(button, (i % 4) * 165, (i / 4) * 43, 155);
         }
         FooterButton("完成", 3, () => { Refresh(); Owner.CloseChooseUI(); Clicks.Clear(); });
@@ -437,7 +570,13 @@ internal static class NativeKungfuFields
             row.Type = Math.Clamp(row.Type, 0, names.Length - 1);
             GameObject? shape = null;
             string Label() => (damage ? "命中" : "释放" + line) + " · " + (row.Removed ? "已移除" : names[row.Type]);
-            shape = Button(Label(), () => { row.Type = (row.Type + 1) % names.Length; shape!.GetComponentInChildren<Text>(true).text = Label(); });
+            shape = Button(Label(), () => {
+                if (row.Removed) return;
+                ChooseValue((damage ? "命中形状" : $"释放 {line} 的形状") + "　·　1–2 格示意，灰色标记中心", names, row.Type, typeIndex => {
+                    row.Type = typeIndex;
+                    shape!.GetComponentInChildren<Text>(true).text = Label();
+                }, damage);
+            });
             Place(shape, 0, line * 35, 225);
             row.Min = CompactField("最近格", min.ToString(C), 230, line * 35, 165);
             row.Max = CompactField("最远格", max.ToString(C), 400, line * 35, 165);
@@ -582,14 +721,14 @@ internal static class NativeKungfuFields
     }
     internal static void ChooseBaseCategory()
     {
-        Begin("新建功法 · 先选择类别，再选择基础功法");
+        Begin("新建功法　·　选择武学类别");
         for (var i = 0; i < 9; i++) {
             var category = i;
             var button = Button(TrainerBehaviour.NativeCategoryName(i), () => {
                 SourceFilters["base"] = new SourceFilter { Type = category };
                 VisualPicker("base", 0);
             });
-            Place(button, (i % 3) * 220, 40 + (i / 3) * 65, 210);
+            Place(button, (i % 3) * 222, 34 + (i / 3) * 72, 202);
         }
         FooterButton(NativeKungfuEditor.ChoosingBase ? "取消新建" : "返回编辑", 3, () => {
             if (NativeKungfuEditor.ChoosingBase) ExitEditor();
@@ -598,6 +737,54 @@ internal static class NativeKungfuFields
     }
     private sealed class SourceFilter { internal string Query = ""; internal int Type = -1, Rarity = -1; }
     private static readonly Dictionary<string, SourceFilter> SourceFilters = new();
+    private static void PlaceSkillCard(GameObject button, KungfuSkillData skill, int slot)
+    {
+        const int width = 124, height = 108;
+        Place(button, slot % 5 * 132, 96 + slot / 5 * 115, width);
+        button.GetComponent<RectTransform>().sizeDelta = new Vector2(width, height);
+        var caption = button.GetComponentInChildren<Text>(true);
+        var rect = caption.rectTransform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = new Vector2(1, 0);
+        rect.pivot = new Vector2(.5f, 0);
+        rect.offsetMin = new Vector2(3, 3);
+        rect.offsetMax = new Vector2(-3, 29);
+        caption.alignment = TextAnchor.MiddleCenter;
+        caption.resizeTextMaxSize = 16;
+
+        var key = skill.GetSkillIcon();
+        var sprite = string.IsNullOrEmpty(key) ? null : TextureController.Instance?.LoadAtlasSprite("IconAtlas", key);
+        if (sprite == null)
+        {
+            caption.text = "暂无图标\n" + skill.name;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMax = new Vector2(-3, -3);
+        }
+        else
+        {
+            var icon = new GameObject("SkillIcon");
+            var image = icon.AddComponent<Image>();
+            image.rectTransform.SetParent(button.transform, false);
+            image.rectTransform.anchorMin = image.rectTransform.anchorMax = new Vector2(.5f, 1f);
+            image.rectTransform.pivot = new Vector2(.5f, 1f);
+            image.rectTransform.anchoredPosition = new Vector2(0, -5);
+            image.rectTransform.sizeDelta = new Vector2(72, 72);
+            image.sprite = sprite;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+        }
+
+        var grade = new GameObject("Grade");
+        var line = grade.AddComponent<Image>();
+        line.rectTransform.SetParent(button.transform, false);
+        line.rectTransform.anchorMin = new Vector2(0, 0);
+        line.rectTransform.anchorMax = new Vector2(1, 0);
+        line.rectTransform.offsetMin = new Vector2(2, 1);
+        line.rectTransform.offsetMax = new Vector2(-2, 4);
+        line.color = TrainerBehaviour.RarityColor(skill.rareLv);
+        line.raycastTarget = false;
+    }
+
     private static void VisualPicker(string field, int page)
     {
         var names = new Dictionary<string, string> { ["icon"] = "图标", ["base"] = "基础功法", ["animation"] = "使用动作", ["weapon"] = "显示武器", ["bullet"] = "弹道", ["visual"] = "场景特效", ["all"] = "整套视觉", ["trail"] = "武器拖尾" };
@@ -615,10 +802,11 @@ internal static class NativeKungfuFields
             if (filter.Query.Length > 0 && !(d.name ?? "").Contains(filter.Query, StringComparison.OrdinalIgnoreCase) && !d.skillID.ToString(C).Contains(filter.Query, StringComparison.OrdinalIgnoreCase)) continue;
             choices.Add(d);
         }
-        const int size = 25;
+        var showCards = field is "base" or "icon";
+        var size = showCards ? 10 : 25;
         choices.Sort((a,b) => a.skillID.CompareTo(b.skillID));
         var pages = Math.Max(1, (choices.Count + size - 1) / size); page = Math.Clamp(page, 0, pages - 1);
-        Begin(names[field] + "来源 · " + choices.Count + "项 · " + (page + 1) + "/" + pages);
+        Begin("选择" + names[field] + "　·　" + choices.Count + " 项　　第 " + (page + 1) + " / " + pages + " 页");
         var search = CompactField("名称 / 编号", filter.Query, 0, 0, 430); search.characterLimit = 80;
         var find = Button("搜索", () => { filter.Query = search.text.Trim(); VisualPicker(field, 0); }); Place(find, 440, 0, 100);
         var reset = Button("重置", () => { filter.Query = ""; filter.Type = filter.Rarity = -1; VisualPicker(field, 0); }); Place(reset, 550, 0, 100);
@@ -648,7 +836,8 @@ internal static class NativeKungfuFields
         for (var i = page * size; i < Math.Min(choices.Count, (page + 1) * size); i++) {
             var donor = choices[i]; var slot = i - page * size;
             var button = Button(donor.name, () => { filter.Query = search.text.Trim(); if (field == "icon") { Owner.draftSkillData.iconName = donor.GetSkillIcon(); Owner.RefreshSkillIcon(); Owner.CloseChooseUI(); Clicks.Clear(); return; } if (field == "base") { NativeKungfuEditor.SelectBase(donor.skillID); return; } TrainerBehaviour.ApplyNativeVisualSource(Owner.draftSkillData, donor, field); Owner.RefreshSkillIcon(); VisualMenu(); });
-            Place(button, (slot % 5) * 132, 96 + (slot / 5) * 44, 125);
+            if (showCards) PlaceSkillCard(button, donor, slot);
+            else Place(button, (slot % 5) * 132, 96 + (slot / 5) * 44, 125);
         }
         if (choices.Count == 0) { var empty = Button("没有匹配项，请调整搜索或筛选", () => { }); Place(empty, 0, 110, 650); Clicks.RemoveAt(Clicks.Count - 1); }
         FooterButton("上一页", 0, () => { filter.Query = search.text.Trim(); VisualPicker(field, page - 1); }, page > 0);
