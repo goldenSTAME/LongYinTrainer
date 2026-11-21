@@ -11,6 +11,8 @@ public static partial class TrainerBehaviour
     {
         _characterEditorHero = hero.heroID;
         _characterEditor = page;
+        _learnedSkillPage = 0;
+        _forgetSelection = IntPtr.Zero;
         RequestPageRebuild();
     }
 
@@ -22,7 +24,8 @@ public static partial class TrainerBehaviour
         AddButton(p, "返回角色数值", new Vector2(810, 0), new Vector2(220, 36), () => { _characterEditor = 0; RequestPageRebuild(); });
         if (_characterEditor <= 3) BuildCharacterStats(hero, _characterEditor);
         else if (_characterEditor == 4) BuildCharacterFace(hero);
-        else BuildCharacterPreferences(hero);
+        else if (_characterEditor == 5) BuildCharacterPreferences(hero);
+        else BuildLearnedSkills(hero);
         return true;
     }
 

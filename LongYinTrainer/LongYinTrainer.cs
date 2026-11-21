@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
-[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.40")]
+[BepInPlugin("codex.longyin.trainer", "LongYin Trainer", "0.4.31.43")]
 public sealed class LongYinTrainerPlugin : BasePlugin
 {
     private sealed class SkillTalentState
@@ -4828,7 +4828,7 @@ public static partial class TrainerBehaviour
         AddText(parent, "已保存的功法（原版修改／自创）", new Vector2(10, 102), new Vector2(560, 36), 19, TextAnchor.MiddleCenter);
 
         const int pageSize = 6;
-        var visibleSkills = _customKungfuStore.Skills.FindAll(record => !record.RemovedContent);
+        var visibleSkills = _customKungfuStore.Skills;
         var pageCount = Math.Max(1, (visibleSkills.Count + pageSize - 1) / pageSize);
         if (visibleSkills.Count == 0)
             AddText(parent, "暂无已保存功法", new Vector2(10, 160), new Vector2(560, 48), 18, TextAnchor.MiddleCenter);
@@ -4841,7 +4841,8 @@ public static partial class TrainerBehaviour
             AddCustomKungfuButton(parent, $"{(saved.EditOriginal ? "[原版] " : "[自创] ")}{saved.Name}　[ID {saved.Id}]", new Vector2(10, 150 + i * 62), new Vector2(560, 48), () =>
             {
                 var record = FindSavedCustomKungfu(captured);
-                if (record == null || record.RemovedContent) return;
+                if (record == null) return;
+                if (record.RemovedContent) { OpenKungfuRemoval(record); return; }
                 _customDraft = CloneCustomKungfuRecord(record);
                 _customStatus = $"已载入 {record.Name}；修改后需再次保存。";
                 _customTab = 0;
@@ -4876,8 +4877,8 @@ public static partial class TrainerBehaviour
             ShowCustomKungfuTab();
         });
         AddCustomKungfuButton(parent, "编辑原版功法（全部九类）", new Vector2(650, 450), new Vector2(570, 44), () => OpenCustomKungfuDonorPicker("editOriginal"));
-        if (FindSavedCustomKungfu(draft.Id) is { RemovedContent: false })
-            AddCustomKungfuButton(parent, "删除当前功法", new Vector2(10, 590), new Vector2(570, 42), RemoveSavedKungfuContent);
+        if (FindSavedCustomKungfu(draft.Id) is { RemovedContent: false } removalTarget)
+            AddCustomKungfuButton(parent, "删除当前功法", new Vector2(10, 590), new Vector2(570, 42), () => OpenKungfuRemoval(removalTarget));
         AddText(parent, "原版修改沿用原 ID，影响所有使用该功法的角色；保存后刷新装备与战斗效果。内功、轻功、绝技请装入各自槽位。升级效果按游戏规则在后续升级时获得。", new Vector2(650, 502), new Vector2(570, 76), 15);
         AddText(parent, "配置每次保存自动备份 .bak；自创功法停用模组前需移除技能与秘籍。", new Vector2(650, 586), new Vector2(570, 40), 14);
     }
@@ -5597,8 +5598,9 @@ public static partial class TrainerBehaviour
         AddButton(p, "六维属性 · 展开编辑", new Vector2(0, 440), new Vector2(405, 34), () => OpenCharacterEditor(hero, 1));
         AddButton(p, "武学 · 展开编辑", new Vector2(0, 485), new Vector2(405, 34), () => OpenCharacterEditor(hero, 2));
         AddButton(p, "技艺 · 展开编辑", new Vector2(0, 530), new Vector2(405, 34), () => OpenCharacterEditor(hero, 3));
-        AddButton(p, "外观代码", new Vector2(0, 580), new Vector2(195, 38), () => OpenCharacterEditor(hero, 4));
-        AddButton(p, "专长与喜好", new Vector2(210, 580), new Vector2(195, 38), () => OpenCharacterEditor(hero, 5));
+        AddButton(p, "已学武学", new Vector2(0, 580), new Vector2(135, 38), () => OpenCharacterEditor(hero, 6));
+        AddButton(p, "外观代码", new Vector2(143, 580), new Vector2(120, 38), () => OpenCharacterEditor(hero, 4));
+        AddButton(p, "专长与喜好", new Vector2(271, 580), new Vector2(134, 38), () => OpenCharacterEditor(hero, 5));
         AddText(p, "天赋槽位上限", new Vector2(520, 440), new Vector2(150, 34));
         var talentSlots = AddInput(p, LongYinTrainerPlugin.PlayerTalentSlotLimit.Value.ToString(CultureInfo.InvariantCulture), new Vector2(675, 440), new Vector2(100, 34));
         AddButton(p, "应用槽位", new Vector2(785, 440), new Vector2(150, 34), () =>
